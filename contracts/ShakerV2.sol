@@ -271,12 +271,12 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
     ) internal {
         require(msg.sender == commitments[_hashkey].sender, 'Locker must be sender');
         require(commitments[_hashkey].lockable, 'This commitment must be lockable');
-        
+        require(commitments[_hashkey].amount >= _refund, 'Balance amount must be enough');
+
         lockReason[_hashkey] = LockReason(
             _description, 
             1,
             block.timestamp,
-            // _hashkey,
             _refund == 0 ? commitments[_hashkey].amount : _refund,
             msg.sender,
             false,
@@ -289,7 +289,6 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         string memory   description, 
         uint8           status, 
         uint256         datetime, 
-        // bytes32      hashKey, 
         uint256         refund, 
         address         locker, 
         bool            recipientAgree,
@@ -301,7 +300,6 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
             data.description, 
             data.status, 
             data.datetime, 
-            // data.hashKey, 
             data.refund, 
             data.locker, 
             data.recipientAgree,
@@ -385,12 +383,15 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
 
     function setLockable(bytes32 _hashKey, bool status) external nonReentrant returns(bool) {
         require(msg.sender == commitments[_hashKey].sender, 'Only sender can change lockable');
+        require(commitments[_hashKey].lockable == true && status == false, 'Can only change from lockable to non-lockable');
         commitments[_hashKey].lockable = status;
     }
 
-    function getDepositDataByHashkey(bytes32 _hashkey) external view returns(uint256 effectiveTime, uint256 amount) {
+    function getDepositDataByHashkey(bytes32 _hashkey) external view returns(uint256 effectiveTime, uint256 amount, bool lockable, bool canEndorse) {
         effectiveTime = commitments[_hashkey].effectiveTime;
         amount = commitments[_hashkey].amount;
+        lockable = commitments[_hashkey].lockable;
+        canEndorse = commitments[_hashkey].canEndorse;
     }
 
     /** @dev set common fee and fee rate */
