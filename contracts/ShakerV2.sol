@@ -49,11 +49,11 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
     address public commonWithdrawAddress; 
     
     // If withdrawal is not throught relayer, use this common fee. Be care of decimal of token
-    uint256 public commonFee = 0; 
+    // uint256 public commonFee = 0; 
     
     // If withdrawal is not throught relayer, use this rate. Total fee is: commoneFee + amount * commonFeeRate. 
     // If the desired rate is 4%, commonFeeRate should set to 400
-    uint256 public commonFeeRate = 25; // 0.25% 
+    // uint256 public commonFeeRate = 25; // 0.25% 
     
     struct LockReason {
         string  description;
@@ -155,7 +155,7 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         require(refundAmount >= _fee, "Refund amount should be more than fee");
 
         address relayer = relayerWithdrawAddress[_relayer] == address(0x0) ? commonWithdrawAddress : relayerWithdrawAddress[_relayer];
-        uint256 _fee1 = getFee(refundAmount);
+        uint256 _fee1 = tokenManager.getFee(refundAmount);
         require(_fee1 <= refundAmount, "The fee can not be more than refund amount");
         uint256 _fee2 = relayerWithdrawAddress[_relayer] == address(0x0) ? _fee1 : _fee; // If not through relay, use commonFee
         _processWithdraw(msg.sender, relayer, _fee2, refundAmount);
@@ -385,6 +385,7 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         require(msg.sender == commitments[_hashKey].sender, 'Only sender can change lockable');
         require(commitments[_hashKey].lockable == true && status == false, 'Can only change from lockable to non-lockable');
         commitments[_hashKey].lockable = status;
+        commitments[_hashKey].canEndorse = true; // If the commitment can not be lock, it must be endorsed
     }
 
     function getDepositDataByHashkey(bytes32 _hashkey) external view returns(uint256 effectiveTime, uint256 amount, bool lockable, bool canEndorse) {
@@ -392,17 +393,6 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         amount = commitments[_hashkey].amount;
         lockable = commitments[_hashkey].lockable;
         canEndorse = commitments[_hashkey].canEndorse;
-    }
-
-    /** @dev set common fee and fee rate */
-    function updateCommonFee(uint256 _fee, uint256 _rate) external nonReentrant onlyOperator {
-        commonFee = _fee;
-        commonFeeRate = _rate;
-    }
-    
-    /** @dev caculate the fee according to amount */
-    function getFee(uint256 _amount) internal view returns(uint256) {
-        return _amount.mul(commonFeeRate).div(10000).add(commonFee);
     }
     
     function updateCouncilJudgementFee(uint256 _fee, uint256 _rate) external nonReentrant onlyCouncil {
