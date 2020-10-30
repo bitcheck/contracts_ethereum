@@ -14,6 +14,7 @@
 pragma solidity >=0.4.23 <0.6.0;
 
 import "./Mocks/BTCHToken.sol";
+import "./Mocks/ERC20.sol";
 // import "../ERC20/BTCHToken.sol";
 import "./ReentrancyGuard.sol";
 
@@ -63,8 +64,11 @@ contract ShakerTokenManager is ReentrancyGuard {
     address public operator;
     address public shakerContractAddress;
     address public tokenAddress;
+    address public dividentAddress;
+    address public feeAddress; // must be same as commonWithdrawAddress in ShakerV2.sol
     
     BTCHToken public token = BTCHToken(tokenAddress);
+    ERC20 public dividentToken = ERC20(dividentAddress);
     
     modifier onlyOperator {
         require(msg.sender == operator, "Only operator can call this function.");
@@ -76,10 +80,13 @@ contract ShakerTokenManager is ReentrancyGuard {
         _;
     }
     
-    constructor(address _shakerContractAddress) public {
+    constructor(address _shakerContractAddress, address _dividentAddress, address _feeAddress) public {
         operator = msg.sender;
         taxBereauAddress = msg.sender;
         shakerContractAddress = _shakerContractAddress;
+        dividentAddress = _dividentAddress;
+        dividentToken = ERC20(dividentAddress);
+        feeAddress = _feeAddress;
     }
     
     function sendBonus(uint256 _amount, uint256 _hours, address _depositer, address _withdrawer) external nonReentrant onlyShaker returns(bool) {
@@ -187,15 +194,22 @@ contract ShakerTokenManager is ReentrancyGuard {
         stageFactors = _stageFactors;
     }
     
+    function setIntervalOfDepositWithdraw(uint256[] calldata _intervalOfDepositWithdraw, uint256[] calldata _intervalOfDepositWithdrawFactor) external onlyOperator {
+      intervalOfDepositWithdrawFactor = _intervalOfDepositWithdrawFactor;
+      intervalOfDepositWithdraw = _intervalOfDepositWithdraw;
+    }
+
     function setBaseFactor(uint256 _baseFactor) external onlyOperator {
         baseFactor = _baseFactor;
     }
     
     function setBonusTokenDecimals(uint256 _decimals) external onlyOperator {
+        require(_decimals >= 0);
         bonusTokenDecimals = _decimals;
     }
     
     function setDeositTokenDecimals(uint256 _decimals) external onlyOperator {
+        require(_decimals >= 0);
         depositTokenDecimals = _decimals;
     }
 
@@ -204,15 +218,22 @@ contract ShakerTokenManager is ReentrancyGuard {
         token = BTCHToken(tokenAddress);
     }
     
+    function setDividentAddress(address _address) external onlyOperator {
+      dividentAddress = _address;
+      dividentToken = ERC20(dividentAddress);
+    }
+
     function setShakerContractAddress(address _shakerContractAddress) external onlyOperator {
         shakerContractAddress = _shakerContractAddress;
     }
     
     function setExponent(uint256[] calldata _exp) external onlyOperator {
+        require(_exp.length == 2 && _exp[1] >= 0);
         exponent = _exp;
     }
     
     function setEachStageAmount(uint256 _eachStageAmount) external onlyOperator {
+        require(_eachStageAmount >= 0);
         eachStageAmount = _eachStageAmount;
     }
 
@@ -223,10 +244,12 @@ contract ShakerTokenManager is ReentrancyGuard {
     }
     
     function setMinMintAmount(uint256 _amount) external onlyOperator {
+        require(_amount >= 0);
         minMintAmount = _amount;
     }
     
     function setFeeRate(uint256 _feeRate) external onlyOperator {
+        require(_feeRate <= 100000 && _feeRate >= 0);
         feeRate = _feeRate;
     }
     
@@ -235,11 +258,64 @@ contract ShakerTokenManager is ReentrancyGuard {
     }
     
     function setTaxRate(uint256 _rate) external onlyOperator {
+        require(_rate <= 10000 && _rate >= 0);
         taxRate = _rate;
+    }
+
+    function setDepositerShareRate(uint256 _rate) external onlyOperator {
+        require(_rate <= 10000 && _rate >= 0);
+        depositerShareRate = _rate;
+    }
+
+    function setFeeAddress(address _address) external onlyOperator {
+        feeAddress = _address;
     }
     
     function updateOperator(address _newOperator) external onlyOperator {
         operator = _newOperator;
     }
-        
+    
+    // Share dividents of fee
+    bool public startGetDividents = false;
+    uint256 public currentStartTimestamp = 0;
+    uint256 public totalDividents = 0;
+    uint256 public getDividentsTimeout = 172800;// Have 2 days to getting current dividents
+
+    mapping(address => uint256) private lastGettingDividentsTime;
+
+    function getDividentsAmount() external view returns(uint256, uint256) {
+      // Caculate normal dividents
+      uint256 btchTokenAmount = token.balanceOf(msg.sender);
+      uint256 totalBTCH = token.totalSupply();
+      require(totalBTCH > 0);
+      uint256 normalDividents = totalDividents.mul(btchTokenAmount).div(totalBTCH);
+      return (normalDividents, lastGettingDividentsTime[msg.sender]);
+    }
+
+    function sendDividents() external {
+      // Only shaker contract can call this function
+      require(block.timestamp <= currentStartTimestamp + getDividentsTimeout && block.timestamp >= currentStartTimestamp, "Getting dividents not start or it's already end");
+      require(lastGettingDividentsTime[msg.sender] < currentStartTimestamp, "You have got dividents already");
+      (uint256 normalDividents,) = this.getDividentsAmount();
+      
+      //Send Dividents ######
+      require(dividentToken.allowance(feeAddress, address(this)) >= normalDividents, "Allowance not enough");
+      dividentToken.transferFrom(feeAddress, msg.sender, normalDividents);
+
+      lastGettingDividentsTime[msg.sender] = block.timestamp;
+    }
+
+    /** Start Dividents by operator */
+    function startDividents(bool status, uint256 amount) external onlyOperator {
+      require(startGetDividents != status);
+      startGetDividents = status;
+      if(status) {
+        currentStartTimestamp = block.timestamp;
+        totalDividents = amount;
+      }
+    }
+
+    function setGettingDividentsTimeout(uint256 _seconds) external onlyOperator {
+      getDividentsTimeout = _seconds;
+    }
 }

@@ -407,5 +407,4 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
     function getJudgementFee(uint256 _amount) internal view returns(uint256) {
         return _amount * councilJudgementFeeRate / 10000 + councilJudgementFee;        
     }
-
 }

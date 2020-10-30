@@ -32,7 +32,9 @@ module.exports = function(deployer, network, accounts) {
     if(btchTokenManager === '') {
       btchTokenManager = await deployer.deploy(
       ShakerTokenManager, 
-      shaker.address
+      shaker.address,
+      ERC20_TOKEN,
+      FEE_ADDRESS
     )} else {
       btchTokenManager = await ShakerTokenManager.deployed()
     }
@@ -56,12 +58,22 @@ module.exports = function(deployer, network, accounts) {
     await btchTokenManager.setTokenAddress(btchToken.address);
     console.log('Token Manager has bound BTCH Token\'s address\n===> ', btchToken.address);
 
-    // Step 6: 
+    // Step 6:
+    // await btchTokenManager.setDividentAddress(ERC20_TOKEN);
+    // console.log('Token Manager has set divident address\n===>', ERC20_TOKEN);
+    // await btchTokenManager.setFeeAddress(FEE_ADDRESS);
+    // console.log('Token Manager has set fee address\n===>', FEE_ADDRESS);
+
+    console.log(`*** Please approve token manager contract ${btchTokenManager.address} to use 100000 USDT from fee account ${FEE_ADDRESS} MANULLY`);
+    console.log(`approve(${btchTokenManager.address}, 100000000000)`);
+
+    // Step 7: 
     shaker = await ERC20ShakerV2.deployed();
     await shaker.updateBonusTokenManager(btchTokenManager.address);
     console.log('Shaker has bound Token Manager\'s address\n===> ', btchTokenManager.address);
     await btchTokenManager.setShakerContractAddress(shaker.address);
     console.log('Token Manager has bound Shaker \'s address\n===> ', shaker.address);
+
 
     // Testing
     // console.log('\n====== TEST ======\n')
