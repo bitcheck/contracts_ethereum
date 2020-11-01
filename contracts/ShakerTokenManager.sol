@@ -57,14 +57,14 @@ contract ShakerTokenManager is ReentrancyGuard {
     uint256 public minChargeFee = 0; // min amount of special charge.
     uint256 public minChargeFeeRate = 10; // percent rate of special charge, if need to charge 0.1%, this will be set 10
     uint256 public minMintAmount = 500 * 10 ** depositTokenDecimals;
-    uint256 public taxRate = 500;// means 5%
+    uint256 public taxRate = 2000;// means 5%
     address public taxBereauAddress; // address to get tax
     uint256 public depositerShareRate = 5000; // depositer and withdrawer will share the bonus, this rate is for sender(depositer). 5000 means 0.500, 50%;
     
     address public operator;
     address public shakerContractAddress;
-    address public tokenAddress;
-    address public dividentAddress;
+    address public tokenAddress; // BTCH token
+    address public dividentAddress; // USDT Token
     address public feeAddress; // must be same as commonWithdrawAddress in ShakerV2.sol
     
     BTCHToken public token = BTCHToken(tokenAddress);
@@ -276,14 +276,14 @@ contract ShakerTokenManager is ReentrancyGuard {
     }
     
     // Share dividents of fee
-    bool public startGetDividents = false;
     uint256 public currentStartTimestamp = 0;
     uint256 public totalDividents = 0;
     uint256 public getDividentsTimeout = 172800;// Have 2 days to getting current dividents
+    event Dividend(address to, uint256 amount, uint256 timestamp);
 
     mapping(address => uint256) private lastGettingDividentsTime;
 
-    function getDividentsAmount() external view returns(uint256, uint256) {
+    function getDividentsAmount() public view returns(uint256, uint256) {
       // Caculate normal dividents
       uint256 btchTokenAmount = token.balanceOf(msg.sender);
       uint256 totalBTCH = token.totalSupply();
@@ -292,30 +292,35 @@ contract ShakerTokenManager is ReentrancyGuard {
       return (normalDividents, lastGettingDividentsTime[msg.sender]);
     }
 
-    function sendDividents() external {
+    function sendDividents() external nonReentrant {
       // Only shaker contract can call this function
       require(block.timestamp <= currentStartTimestamp + getDividentsTimeout && block.timestamp >= currentStartTimestamp, "Getting dividents not start or it's already end");
       require(lastGettingDividentsTime[msg.sender] < currentStartTimestamp, "You have got dividents already");
-      (uint256 normalDividents,) = this.getDividentsAmount();
+      (uint256 normalDividents,) = getDividentsAmount();
       
-      //Send Dividents ######
+      // Send Dividents
+      // The fee account must approve the this contract enough allowance of USDT as dividend
       require(dividentToken.allowance(feeAddress, address(this)) >= normalDividents, "Allowance not enough");
-      dividentToken.transferFrom(feeAddress, msg.sender, normalDividents);
+      dividentToken.transferFrom(feeAddress, msg.sender, normalDividents); // ######
 
       lastGettingDividentsTime[msg.sender] = block.timestamp;
+      emit Dividend(msg.sender, normalDividents, block.timestamp);
     }
 
     /** Start Dividents by operator */
-    function startDividents(bool status, uint256 amount) external onlyOperator {
-      require(startGetDividents != status);
-      startGetDividents = status;
-      if(status) {
-        currentStartTimestamp = block.timestamp;
-        totalDividents = amount;
-      }
+    function startDividents(uint256 from, uint256 amount) external onlyOperator nonReentrant{
+      require(from > block.timestamp);
+      require(amount > 0);
+      currentStartTimestamp = from;
+      totalDividents = amount;
     }
 
     function setGettingDividentsTimeout(uint256 _seconds) external onlyOperator {
       getDividentsTimeout = _seconds;
     }
+
+    function getLastTakingDividentsTime() external view returns(uint256) {
+      return lastGettingDividentsTime[msg.sender];
+    }
+
 }
