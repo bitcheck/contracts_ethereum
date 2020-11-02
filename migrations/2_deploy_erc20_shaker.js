@@ -1,9 +1,9 @@
 /* global artifacts */
 require('dotenv').config({ path: '../.env' })
 const Token = artifacts.require('./Mocks/Token.sol')
-const ERC20ShakerV2 = artifacts.require('ERC20ShakerV2')
+const ERC20ShakerV2 = artifacts.require('./ERC20ShakerV2')
 const BTCHToken = artifacts.require('./Mocks/BTCHToken.sol')
-const ShakerTokenManager = artifacts.require('./Mocks/ShakerTokenManager.sol')
+const ShakerTokenManager = artifacts.require('./ShakerTokenManager.sol')
 
 module.exports = function(deployer, network, accounts) {
   return deployer.then(async () => {
@@ -59,11 +59,9 @@ module.exports = function(deployer, network, accounts) {
     console.log('Token Manager has bound BTCH Token\'s address\n===> ', btchToken.address);
 
     // Step 6:
-    // await btchTokenManager.setDividentAddress(ERC20_TOKEN);
-    // console.log('Token Manager has set divident address\n===>', ERC20_TOKEN);
-    // await btchTokenManager.setFeeAddress(FEE_ADDRESS);
-    // console.log('Token Manager has set fee address\n===>', FEE_ADDRESS);
-
+    await btchToken.updateAuthorizedContract(btchTokenManager.address);
+    console.log('BTCH Token has updated authorized manager contract \n===> ', btchTokenManager.address);
+    
     console.log(`*** Please approve token manager contract ${btchTokenManager.address} to use 100000 USDT from fee account ${FEE_ADDRESS} MANULLY`);
     console.log(`approve(${btchTokenManager.address}, 100000000000)`);
 
@@ -74,11 +72,13 @@ module.exports = function(deployer, network, accounts) {
     await btchTokenManager.setShakerContractAddress(shaker.address);
     console.log('Token Manager has bound Shaker \'s address\n===> ', shaker.address);
 
-
     // Testing
-    // console.log('\n====== TEST ======\n')
-    // btchToken = await BTCHToken.deployed();
-    // const mintAmount = await btchTokenManager.getMintAmount(1000000000, 23);
-    // console.log('mint amount', mintAmount.toString());
+    console.log('\n====== TEST ======\n')
+    console.log('btchTokenManager', btchTokenManager.address);
+    btchToken = await BTCHToken.deployed();
+    console.log('eachStageAmount', (await btchTokenManager.eachStageAmount()).toString());
+    console.log('total supply', (await btchTokenManager.getTokenTotalSupply()).toString());
+    const mintAmount = await btchTokenManager.getMintAmount(1000000000, 23);
+    console.log('mint amount', mintAmount.toString());
   })
 }

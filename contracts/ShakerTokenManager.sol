@@ -15,10 +15,7 @@ pragma solidity >=0.4.23 <0.6.0;
 
 import "./Mocks/BTCHToken.sol";
 import "./Mocks/ERC20.sol";
-// import "../ERC20/BTCHToken.sol";
 import "./ReentrancyGuard.sol";
-
-// import "./SafeMath.sol";
 
 /**
  * The bonus will calculated with 5 factors:
@@ -44,29 +41,38 @@ import "./ReentrancyGuard.sol";
 contract ShakerTokenManager is ReentrancyGuard {
     using SafeMath for uint256;
     
-    uint256 public bonusTokenDecimals = 6; // bonus token decimals
-    uint256 public depositTokenDecimals = 6; // deposit and withdrawal token decimals
+    uint256 public bonusTokenDecimals = 6; // bonus token decimals, BTCH
+    uint256 public depositTokenDecimals = 6; // deposit and withdrawal token decimals, USDT
+
+    // Params
     uint256 public baseFactor = 50; // 50 means 0.05
     uint256[] public intervalOfDepositWithdraw = [1, 24, 48, 96, 192, 384, 720]; // hours of inverval between deposit and withdraw
     uint256[] public intervalOfDepositWithdrawFactor = [5000, 15000, 16800, 20600, 28600, 45500, 81500]; // 5000 will be devided by 1e5, means 0.05
-    uint256[] public stageFactors = [5000, 2500, 1250]; // Stage factor, 5000 means 5, 2500 means 2.5, etc.
-    uint256 public eachStageAmount = 1e11; // Each stage amount, if 100000, this amount will be 1e11 (including decimals)
+    uint256[] public stageFactors = [10000, 5000, 2500, 1250, 625]; // Stage factor, 5000 means 5, 2500 means 2.5, etc.
+    uint256 public eachStageAmount = 7200000 * 10 ** bonusTokenDecimals; // Each stage amount
     uint256[] public exponent = [2, 3];// means 2/3
-    uint256 public feeRate = 16667;// 16.67 will be 16667
-    uint256 public minChargeFeeAmount = 500 * 10 ** depositTokenDecimals;// Below this amount, will only charge  very special fee, like zero
+    uint256 public feeRate = 33333; // 33.333% will be 33333
+    uint256 public minChargeFeeAmount = 10 * 10 ** depositTokenDecimals;// Below this amount, will only charge  very special fee
     uint256 public minChargeFee = 0; // min amount of special charge.
-    uint256 public minChargeFeeRate = 10; // percent rate of special charge, if need to charge 0.1%, this will be set 10
-    uint256 public minMintAmount = 500 * 10 ** depositTokenDecimals;
-    uint256 public taxRate = 2000;// means 5%
-    address public taxBereauAddress; // address to get tax
+    uint256 public minChargeFeeRate = 180; // percent rate of special charge, if need to charge 1.5%, this will be set 150
+    uint256 public minMintAmount = 10 * 10 ** depositTokenDecimals;
+    uint256 public taxRate = 2000;// means 20%
     uint256 public depositerShareRate = 5000; // depositer and withdrawer will share the bonus, this rate is for sender(depositer). 5000 means 0.500, 50%;
     
     address public operator;
+    address public taxBereauAddress; // address to get tax
     address public shakerContractAddress;
     address public tokenAddress; // BTCH token
     address public dividentAddress; // USDT Token
     address public feeAddress; // must be same as commonWithdrawAddress in ShakerV2.sol
     
+    // Share dividents of fee
+    uint256 public currentStartTimestamp = 0;
+    uint256 public totalDividents = 0;
+    uint256 public getDividentsTimeout = 172800;// Have 2 days to getting current dividents
+    event Dividend(address to, uint256 amount, uint256 timestamp);
+    mapping(address => uint256) private lastGettingDividentsTime;
+
     BTCHToken public token = BTCHToken(tokenAddress);
     ERC20 public dividentToken = ERC20(dividentAddress);
     
@@ -132,10 +138,9 @@ contract ShakerTokenManager is ReentrancyGuard {
     
     function getStageFactor() internal view returns(uint256) {
         uint256 tokenTotalSupply = getTokenTotalSupply();
-        uint256 stage = tokenTotalSupply.div(eachStageAmount); // each 100,000 is a stage
-        return stageFactors[stage > 2 ? 2 : stage];
+        uint256 stage = tokenTotalSupply.div(eachStageAmount);
+        return stageFactors[stage > stageFactors.length - 1 ? stageFactors.length - 1 : stage];
     }
-    
 
     function getIntervalFactor(uint256 _hours) internal view returns(uint256) {
         uint256 id = intervalOfDepositWithdraw.length - 1;
@@ -275,14 +280,6 @@ contract ShakerTokenManager is ReentrancyGuard {
         operator = _newOperator;
     }
     
-    // Share dividents of fee
-    uint256 public currentStartTimestamp = 0;
-    uint256 public totalDividents = 0;
-    uint256 public getDividentsTimeout = 172800;// Have 2 days to getting current dividents
-    event Dividend(address to, uint256 amount, uint256 timestamp);
-
-    mapping(address => uint256) private lastGettingDividentsTime;
-
     function getDividentsAmount() public view returns(uint256, uint256) {
       // Caculate normal dividents
       uint256 btchTokenAmount = token.balanceOf(msg.sender);
