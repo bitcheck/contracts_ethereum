@@ -4,10 +4,11 @@ const Token = artifacts.require('./Mocks/Token.sol')
 const ERC20ShakerV2 = artifacts.require('./ERC20ShakerV2')
 const BTCHToken = artifacts.require('./Mocks/BTCHToken.sol')
 const ShakerTokenManager = artifacts.require('./ShakerTokenManager.sol')
+const DividendPool = artifacts.require('./DividendPool.sol');
 
 module.exports = function(deployer, network, accounts) {
   return deployer.then(async () => {
-    const { ERC20_TOKEN, SHAKER_ADDRESS, FEE_ADDRESS, BTCH_TOKEN, BTCH_TOKEN_MANAGER } = process.env
+    const { ERC20_TOKEN, SHAKER_ADDRESS, FEE_ADDRESS, BTCH_TOKEN, BTCH_TOKEN_MANAGER, DIVIDEND_POOL } = process.env
 
     // Step 1: Deploy Test USDT, if on mainnet, set the real USDT address in .env
     let token = ERC20_TOKEN
@@ -33,8 +34,8 @@ module.exports = function(deployer, network, accounts) {
       btchTokenManager = await deployer.deploy(
       ShakerTokenManager, 
       shaker.address,
-      ERC20_TOKEN,
-      FEE_ADDRESS
+      // ERC20_TOKEN,
+      // FEE_ADDRESS
     )} else {
       btchTokenManager = await ShakerTokenManager.deployed()
     }
@@ -62,15 +63,29 @@ module.exports = function(deployer, network, accounts) {
     await btchToken.updateAuthorizedContract(btchTokenManager.address);
     console.log('BTCH Token has updated authorized manager contract \n===> ', btchTokenManager.address);
     
-    console.log(`*** Please approve token manager contract ${btchTokenManager.address} to use 100000 USDT from fee account ${FEE_ADDRESS} MANULLY`);
-    console.log(`approve(${btchTokenManager.address}, 100000000000)`);
-
     // Step 7: 
     shaker = await ERC20ShakerV2.deployed();
     await shaker.updateBonusTokenManager(btchTokenManager.address);
     console.log('Shaker has bound Token Manager\'s address\n===> ', btchTokenManager.address);
     await btchTokenManager.setShakerContractAddress(shaker.address);
     console.log('Token Manager has bound Shaker \'s address\n===> ', shaker.address);
+
+    // Step 8:
+    let dividendPool = DIVIDEND_POOL;
+    if(dividendPool === '') {
+      dividendPool = await deployer.deploy(
+        DividendPool,
+        btchToken.address,
+        ERC20_TOKEN,
+        FEE_ADDRESS,
+        accounts[0]
+      )
+    } else {
+      dividendPool = await DividendPool.deployed();
+    }
+    console.log('Dividend Pool\'s address\n===> ', dividendPool.address);
+    console.log(`*** Please approve dividend pool contract ${dividendPool.address} to use 100000 USDT from fee account ${FEE_ADDRESS} MANULLY`);
+    console.log(`approve(${dividendPool.address}, 100000000000)`);
 
     // Testing
     console.log('\n====== TEST ======\n')

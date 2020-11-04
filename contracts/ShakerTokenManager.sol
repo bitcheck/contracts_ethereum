@@ -63,19 +63,9 @@ contract ShakerTokenManager is ReentrancyGuard {
     address public taxBereauAddress; // address to get tax
     address public shakerContractAddress;
     address public tokenAddress; // BTCH token
-    address public dividentAddress; // USDT Token
-    address public feeAddress; // must be same as commonWithdrawAddress in ShakerV2.sol
-    
-    // Share dividents of fee
-    uint256 public currentStartTimestamp = 0;
-    uint256 public totalDividents = 0;
-    uint256 public getDividentsTimeout = 172800;// Have 2 days to getting current dividents
-    event Dividend(address to, uint256 amount, uint256 timestamp);
-    mapping(address => uint256) private lastGettingDividentsTime;
 
     BTCHToken public token = BTCHToken(tokenAddress);
-    ERC20 public dividentToken = ERC20(dividentAddress);
-    
+
     modifier onlyOperator {
         require(msg.sender == operator, "Only operator can call this function.");
         _;
@@ -86,13 +76,10 @@ contract ShakerTokenManager is ReentrancyGuard {
         _;
     }
     
-    constructor(address _shakerContractAddress, address _dividentAddress, address _feeAddress) public {
+    constructor(address _shakerContractAddress) public {
         operator = msg.sender;
         taxBereauAddress = msg.sender;
         shakerContractAddress = _shakerContractAddress;
-        dividentAddress = _dividentAddress;
-        dividentToken = ERC20(dividentAddress);
-        feeAddress = _feeAddress;
     }
     
     function sendBonus(uint256 _amount, uint256 _hours, address _depositer, address _withdrawer) external nonReentrant onlyShaker returns(bool) {
@@ -223,10 +210,6 @@ contract ShakerTokenManager is ReentrancyGuard {
         token = BTCHToken(tokenAddress);
     }
     
-    function setDividentAddress(address _address) external onlyOperator {
-      dividentAddress = _address;
-      dividentToken = ERC20(dividentAddress);
-    }
 
     function setShakerContractAddress(address _shakerContractAddress) external onlyOperator {
         shakerContractAddress = _shakerContractAddress;
@@ -272,52 +255,9 @@ contract ShakerTokenManager is ReentrancyGuard {
         depositerShareRate = _rate;
     }
 
-    function setFeeAddress(address _address) external onlyOperator {
-        feeAddress = _address;
-    }
-    
     function updateOperator(address _newOperator) external onlyOperator {
+        require(_newOperator != address(0));
         operator = _newOperator;
-    }
-    
-    function getDividentsAmount() public view returns(uint256, uint256) {
-      // Caculate normal dividents
-      uint256 btchTokenAmount = token.balanceOf(msg.sender);
-      uint256 totalBTCH = token.totalSupply();
-      require(totalBTCH > 0);
-      uint256 normalDividents = totalDividents.mul(btchTokenAmount).div(totalBTCH);
-      return (normalDividents, lastGettingDividentsTime[msg.sender]);
-    }
-
-    function sendDividents() external nonReentrant {
-      // Only shaker contract can call this function
-      require(block.timestamp <= currentStartTimestamp + getDividentsTimeout && block.timestamp >= currentStartTimestamp, "Getting dividents not start or it's already end");
-      require(lastGettingDividentsTime[msg.sender] < currentStartTimestamp, "You have got dividents already");
-      (uint256 normalDividents,) = getDividentsAmount();
-      
-      // Send Dividents
-      // The fee account must approve the this contract enough allowance of USDT as dividend
-      require(dividentToken.allowance(feeAddress, address(this)) >= normalDividents, "Allowance not enough");
-      dividentToken.transferFrom(feeAddress, msg.sender, normalDividents); // ######
-
-      lastGettingDividentsTime[msg.sender] = block.timestamp;
-      emit Dividend(msg.sender, normalDividents, block.timestamp);
-    }
-
-    /** Start Dividents by operator */
-    function startDividents(uint256 from, uint256 amount) external onlyOperator nonReentrant{
-      require(from > block.timestamp);
-      require(amount > 0);
-      currentStartTimestamp = from;
-      totalDividents = amount;
-    }
-
-    function setGettingDividentsTimeout(uint256 _seconds) external onlyOperator {
-      getDividentsTimeout = _seconds;
-    }
-
-    function getLastTakingDividentsTime() external view returns(uint256) {
-      return lastGettingDividentsTime[msg.sender];
     }
 
 }
