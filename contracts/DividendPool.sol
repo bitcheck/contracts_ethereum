@@ -48,13 +48,12 @@ contract DividendPool is ReentrancyGuard {
       address _tokenAddress, 
       address _dividentAddress, 
       address _feeAddress, 
-      address _operator
     ) public {
         tokenAddress = _tokenAddress;
         token = BTCHToken(tokenAddress);
         dividentAddress = _dividentAddress;
         dividentToken = ERC20(dividentAddress);
-        operator = _operator;
+        operator = msg.sender;
         feeAddress = _feeAddress;
     }
     

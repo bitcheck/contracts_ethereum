@@ -76,10 +76,10 @@ contract ShakerTokenManager is ReentrancyGuard {
         _;
     }
     
-    constructor(address _shakerContractAddress) public {
+    constructor(address _shakerContractAddress, address _taxBefeauAddress) public {
         operator = msg.sender;
-        taxBereauAddress = msg.sender;
         shakerContractAddress = _shakerContractAddress;
+        taxBereauAddress = _taxBereauAddress;
     }
     
     function sendBonus(uint256 _amount, uint256 _hours, address _depositer, address _withdrawer) external nonReentrant onlyShaker returns(bool) {

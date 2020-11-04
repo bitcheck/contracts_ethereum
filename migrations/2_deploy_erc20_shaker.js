@@ -8,7 +8,7 @@ const DividendPool = artifacts.require('./DividendPool.sol');
 
 module.exports = function(deployer, network, accounts) {
   return deployer.then(async () => {
-    const { ERC20_TOKEN, SHAKER_ADDRESS, FEE_ADDRESS, BTCH_TOKEN, BTCH_TOKEN_MANAGER, DIVIDEND_POOL } = process.env
+    const { ERC20_TOKEN, SHAKER_ADDRESS, FEE_ADDRESS, BTCH_TOKEN, BTCH_TOKEN_MANAGER, DIVIDEND_POOL, TAX_BEREAU } = process.env
 
     // Step 1: Deploy Test USDT, if on mainnet, set the real USDT address in .env
     let token = ERC20_TOKEN
@@ -20,9 +20,9 @@ module.exports = function(deployer, network, accounts) {
     if(shaker === '') {
       shaker = await deployer.deploy(
       ERC20ShakerV2,
-      accounts[0],
-      FEE_ADDRESS,
-      token,
+      accounts[0],  // Operator
+      FEE_ADDRESS,  // commonWithdrawAddress
+      token,        // USDT Token address
     )} else {
       shaker = await ERC20ShakerV2.deployed();
     }
@@ -34,8 +34,7 @@ module.exports = function(deployer, network, accounts) {
       btchTokenManager = await deployer.deploy(
       ShakerTokenManager, 
       shaker.address,
-      // ERC20_TOKEN,
-      // FEE_ADDRESS
+      TAX_BEREAU
     )} else {
       btchTokenManager = await ShakerTokenManager.deployed()
     }
@@ -77,8 +76,7 @@ module.exports = function(deployer, network, accounts) {
         DividendPool,
         btchToken.address,
         ERC20_TOKEN,
-        FEE_ADDRESS,
-        accounts[0]
+        FEE_ADDRESS     // Send dividend from this address
       )
     } else {
       dividendPool = await DividendPool.deployed();
