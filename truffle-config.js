@@ -61,10 +61,10 @@ module.exports = {
       skipDryRun: true
     },
     mainnet: {
-      provider: () => new HDWalletProvider(process.env.PRIVATE_KEY_MAINNET, 'http://ethereum-rpc.trustwalletapp.com'),
+      provider: () => new HDWalletProvider(process.env.PRIVATE_KEY_MAINNET, 'https://mainnet.infura.io/v3/3446259cb0e74d68b614f9a10328a368'),
       network_id: 1,
       gas: 6000000,
-      gasPrice: utils.toWei('2', 'gwei'),
+      gasPrice: utils.toWei('22', 'gwei'),
       // confirmations: 0,
       // timeoutBlocks: 200,
       skipDryRun: true

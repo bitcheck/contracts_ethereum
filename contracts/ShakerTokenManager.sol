@@ -76,7 +76,7 @@ contract ShakerTokenManager is ReentrancyGuard {
         _;
     }
     
-    constructor(address _shakerContractAddress, address _taxBefeauAddress) public {
+    constructor(address _shakerContractAddress, address _taxBereauAddress) public {
         operator = msg.sender;
         shakerContractAddress = _shakerContractAddress;
         taxBereauAddress = _taxBereauAddress;

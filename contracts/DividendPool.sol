@@ -47,7 +47,7 @@ contract DividendPool is ReentrancyGuard {
     constructor(
       address _tokenAddress, 
       address _dividentAddress, 
-      address _feeAddress, 
+      address _feeAddress
     ) public {
         tokenAddress = _tokenAddress;
         token = BTCHToken(tokenAddress);
