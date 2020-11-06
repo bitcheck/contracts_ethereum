@@ -210,7 +210,6 @@ contract ShakerTokenManager is ReentrancyGuard {
         token = BTCHToken(tokenAddress);
     }
     
-
     function setShakerContractAddress(address _shakerContractAddress) external onlyOperator {
         shakerContractAddress = _shakerContractAddress;
     }
