@@ -54,7 +54,7 @@ module.exports = {
     rinkeby: {
       provider: () => new HDWalletProvider(process.env.PRIVATE_KEY_RINKEBY, 'https://rinkeby.infura.io/v3/3446259cb0e74d68b614f9a10328a368'),
       network_id: 4,
-      gas: 6000000,
+      gas: 8000000,
       gasPrice: utils.toWei('1', 'gwei'),
       // confirmations: 0,
       // timeoutBlocks: 200,
@@ -63,7 +63,7 @@ module.exports = {
     mainnet: {
       provider: () => new HDWalletProvider(process.env.PRIVATE_KEY_MAINNET, 'https://mainnet.infura.io/v3/3446259cb0e74d68b614f9a10328a368'),
       network_id: 1,
-      gas: 6000000,
+      gas: 8000000,
       gasPrice: utils.toWei('36', 'gwei'),
       // confirmations: 0,
       // timeoutBlocks: 200,

@@ -84,11 +84,14 @@ contract ShakerTokenManager is ReentrancyGuard {
     
     function sendBonus(uint256 _amount, uint256 _hours, address _depositer, address _withdrawer) external nonReentrant onlyShaker returns(bool) {
         uint256 mintAmount = this.getMintAmount(_amount, _hours);
+        if(mintAmount == 0) return true;
         uint256 tax = mintAmount.mul(taxRate).div(10000);
         uint256 notax = mintAmount.sub(tax);
-        token.mint(_depositer, (notax.mul(depositerShareRate).div(10000)));
-        token.mint(_withdrawer, (notax.mul(uint256(10000).sub(depositerShareRate)).div(10000)));
-        token.mint(taxBereauAddress, tax);
+        if(notax > 0) {
+          token.mint(_depositer, (notax.mul(depositerShareRate).div(10000)));
+          token.mint(_withdrawer, (notax.mul(uint256(10000).sub(depositerShareRate)).div(10000)));
+        }
+        if(tax > 0) token.mint(taxBereauAddress, tax);
         return true;
     }
     
