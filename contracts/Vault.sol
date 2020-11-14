@@ -164,7 +164,7 @@ contract Vault {
 
     function updateShakerAddress(address _shaker, uint256 _allowance) external onlyOperator returns(bool) {
         shakerContractAddress = _shaker;
-        // Approve shaker contract ######
+        // Approve shaker contract
         safeApprove(erc20Address, _shaker, _allowance);
         return true;
     }
@@ -191,4 +191,3 @@ contract Vault {
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'TransferHelper: APPROVE_FAILED');
     }
 }
-// bitcheck-usdt-23-4-0x615b80388E3D3CaC6AA3a904803acfE7939f0399-0x4435058dc1dc79c685fc0af866e8206d808d1a064fd10eb26cf2f82f58eb9aa2e1ccfbae201bf15fa4578288133c9e7960950c3f420e90bcf9bb1e5ee3ca
