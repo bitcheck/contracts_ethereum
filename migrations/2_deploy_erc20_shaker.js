@@ -106,8 +106,9 @@ module.exports = function(deployer, network, accounts) {
 
     // Ajust params for Tron network
     btchTokenManager = await ShakerTokenManager.deployed();
-    btchTokenManager.setMinChargeFeeParams(10000000 * 10e6, 0, 100);
-    btchTokenManager.setMinMintAmount(10000000 * 10e6);
+    
+    btchTokenManager.setMinChargeFeeParams(10 * 10e6, 0, 180);
+    btchTokenManager.setMinMintAmount(10 * 10e6);
 
     // Testing
     console.log('\n====== TEST ======\n')

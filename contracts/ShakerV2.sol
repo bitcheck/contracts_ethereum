@@ -45,14 +45,14 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
     
     struct LockReason {
         string  description;
-        uint8   status;         // 0- never happend, 1- locked, 2- confirm by recipient, 3- unlocked by council, 4- cancel refund by sender, 5- refund by sender himself
+        uint256   status;         // 0- never happend, 1- locked, 2- confirm by recipient, 3- unlocked by council, 4- cancel refund by sender, 5- refund by sender himself
         uint256 datetime;       // Lock date
         uint256 replyDeadline;  // If the recipent don't reply(confirm or don't confirm) during this time, the sender can refund 
         uint256 refund;
         address payable locker;
-        bool    recipientAgree;
-        bool    senderAgree;
-        bool    toCouncil;
+        uint256 recipientAgree;
+        uint256 senderAgree;
+        uint256 toCouncil;
     }
     // locakReason key is hashKey = hash(commitment, recipient)
     mapping(bytes32 => LockReason) private lockReason;
@@ -99,18 +99,18 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         uint256 _amount, 
         uint256 _effectiveTime
     ) internal {
-        require(!vault.getStatus(_hashKey), "The commitment has been submitted or used out.");
+        require(vault.getStatus(_hashKey) == 0, "The commitment has been submitted or used out.");
         require(_amount > 0);
         
         _processDeposit(_amount, vaultAddress);
         
-        vault.setStatus(_hashKey, true);
+        vault.setStatus(_hashKey, 1);
         vault.setAmount(_hashKey, _amount);
         vault.setSender(_hashKey, msg.sender);
         vault.setEffectiveTime(_hashKey, _effectiveTime < block.timestamp ? block.timestamp : _effectiveTime);
         vault.setTimestamp(_hashKey, block.timestamp);
-        vault.setCanEndorse(_hashKey, false);
-        vault.setLockable(_hashKey, true);
+        vault.setCanEndorse(_hashKey, 0);
+        vault.setLockable(_hashKey, 1);
         
         vault.addTotalAmount(_amount);
         vault.addTotalBalance(_amount);
@@ -151,7 +151,7 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         _processWithdraw(msg.sender, relayer, _fee2, refundAmount);
     
         vault.setAmount(_hashkey, vault.getAmount(_hashkey).sub(refundAmount));
-        vault.setStatus(_hashkey, vault.getAmount(_hashkey) <= 0 ? false : true);
+        vault.setStatus(_hashkey, vault.getAmount(_hashkey) <= 0 ? 0 : 1);
         vault.subTotalBalance(refundAmount);
 
         uint256 _hours = (block.timestamp.sub(vault.getTimestamp(_hashkey))).div(3600);
@@ -185,9 +185,9 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
     ) internal {
         bytes32 _oldHashKey = getHashkey(_oldCommitment);
         require(lockReason[_oldHashKey].status != 1, 'This deposit was locked');
-        require(vault.getStatus(_oldHashKey), "Old commitment can not find");
-        require(!vault.getStatus(_newHashKey), "The new commitment has been submitted or used out");
-        require(vault.getCanEndorse(_oldHashKey), "Old commitment can not endorse");
+        require(vault.getStatus(_oldHashKey) == 1, "Old commitment can not find");
+        require(vault.getStatus(_newHashKey) == 0, "The new commitment has been submitted or used out");
+        require(vault.getCanEndorse(_oldHashKey) == 1, "Old commitment can not endorse");
         require(vault.getAmount(_oldHashKey) > 0, "No balance amount of this proof");
         uint256 refundAmount = _amount < vault.getAmount(_oldHashKey) ? _amount : vault.getAmount(_oldHashKey); //Take all if _refund == 0
         require(refundAmount > 0, "Refund amount can not be zero");
@@ -195,15 +195,15 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         if(_effectiveTime > 0 && block.timestamp >= vault.getEffectiveTime(_oldHashKey)) vault.setEffectiveTime(_oldHashKey,  _effectiveTime); // Effective
         else vault.setEffectiveTime(_newHashKey, vault.getEffectiveTime(_oldHashKey)); // Not effective
         
-        vault.setStatus(_newHashKey, true);
+        vault.setStatus(_newHashKey, 1);
         vault.setAmount(_newHashKey, refundAmount);
         vault.setSender(_newHashKey, msg.sender);
         vault.setTimestamp(_newHashKey, block.timestamp);
-        vault.setCanEndorse(_newHashKey, false);
-        vault.setLockable(_newHashKey, true);
+        vault.setCanEndorse(_newHashKey, 0);
+        vault.setLockable(_newHashKey, 1);
         
         vault.setAmount(_oldHashKey, vault.getAmount(_oldHashKey).sub(refundAmount));
-        vault.setStatus(_oldHashKey, vault.getAmount(_oldHashKey) <= 0 ? false : true);
+        vault.setStatus(_oldHashKey, vault.getAmount(_oldHashKey) <= 0 ? 0 : 1);
 
         // emit Withdrawal(_oldCommitment,  0, refundAmount, block.timestamp);
         vault.sendWithdrawEvent(_oldCommitment,  0, refundAmount, block.timestamp);
@@ -268,7 +268,7 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         uint256 _replyHours
     ) internal {
         require(msg.sender == vault.getSender(_hashkey), 'Locker must be sender');
-        require(vault.getLockable(_hashkey), 'This commitment must be lockable');
+        require(vault.getLockable(_hashkey) == 1, 'This commitment must be lockable');
         require(vault.getAmount(_hashkey) >= _refund, 'Balance amount must be enough');
         require(_replyHours >= minReplyHours, 'The reply days less than minReplyHours');
 
@@ -279,23 +279,23 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
             _replyHours * 3600 + block.timestamp,
             _refund == 0 ? vault.getAmount(_hashkey) : _refund,
             msg.sender,
-            false,
-            false,
-            false
+            0,
+            0,
+            0
         );
     }
     
     function getLockReason(bytes32 _hashkey) public view returns(
         string memory   description, 
-        uint8           status, 
+        uint256         status, 
         uint256         datetime, 
         uint256         replyDeadline,
         uint256         currentTime,
         uint256         refund, 
         address         locker, 
-        bool            recipientAgree,
-        bool            senderAgree,
-        bool            toCouncil
+        uint256         recipientAgree,
+        uint256         senderAgree,
+        uint256         toCouncil
     ) {
         LockReason memory data = lockReason[_hashkey];
         return (
@@ -316,7 +316,7 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         // _result = 1: sender win
         // _result = 2: recipient win
         require(_result == 1 || _result == 2);
-        if(lockReason[_hashkey].status == 1 && lockReason[_hashkey].toCouncil) {
+        if(lockReason[_hashkey].status == 1 && lockReason[_hashkey].toCouncil == 1) {
             lockReason[_hashkey].status = 3;
             // If the council decided to return back money to the sender
             uint256 councilFee = getJudgementFee(lockReason[_hashkey].refund);
@@ -324,13 +324,13 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
                 _processWithdraw(lockReason[_hashkey].locker, councilAddress, councilFee, lockReason[_hashkey].refund);
                 vault.subTotalBalance(lockReason[_hashkey].refund);
                 vault.setAmount(_hashkey, vault.getAmount(_hashkey).sub(lockReason[_hashkey].refund));
-                vault.setStatus(_hashkey, vault.getAmount(_hashkey) == 0 ? false : true);
+                vault.setStatus(_hashkey, vault.getAmount(_hashkey) == 0 ? 0 : 1);
             } else {
                 lockReason[_hashkey].status = 3;
                 _safeErc20Transfer(councilAddress, councilFee);
                 vault.subTotalBalance(councilFee);
                 vault.setAmount(_hashkey, vault.getAmount(_hashkey).sub(councilFee));
-                vault.setStatus(_hashkey, vault.getAmount(_hashkey) == 0 ? false : true);
+                vault.setStatus(_hashkey, vault.getAmount(_hashkey) == 0 ? 0 : 1);
             }
         }
     }
@@ -341,33 +341,33 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
      */
     function unlockByRecipent(bytes32 _hashkey, bytes32 _commitment, uint8 _status) external nonReentrant {
         bytes32 _recipientHashKey = getHashkey(bytes32ToString(_commitment));
-        bool isSender = msg.sender == vault.getSender(_hashkey);
-        bool isRecipent = _hashkey == _recipientHashKey;
+        uint256 isSender = msg.sender == vault.getSender(_hashkey) ? 1 : 0;
+        uint256 isRecipent = _hashkey == _recipientHashKey ? 1 : 0;
 
-        require(isSender || isRecipent, 'Must be called by recipient or original sender');
+        require(isSender == 1 || isRecipent == 1, 'Must be called by recipient or original sender');
         require(_status == 1 || _status == 2 || _status == 3, 'params can only be 1,2,3');
         require(lockReason[_hashkey].status == 1, 'This commitment is not locked');
 
-        if(isSender && block.timestamp >= lockReason[_hashkey].datetime && _status != 3) {
+        if(isSender == 1 && block.timestamp >= lockReason[_hashkey].datetime && _status != 3) {
             // Sender accept to keep cheque available
             lockReason[_hashkey].status = _status == 2 ? 4 : 1;
-            lockReason[_hashkey].senderAgree = _status == 2;
-            lockReason[_hashkey].toCouncil = _status == 1;
-        } else if(isSender && block.timestamp >= lockReason[_hashkey].replyDeadline && _status == 3) {
+            lockReason[_hashkey].senderAgree = _status == 2 ? 1 : 0;
+            lockReason[_hashkey].toCouncil = _status == 1 ? 1 : 0;
+        } else if(isSender == 1 && block.timestamp >= lockReason[_hashkey].replyDeadline && _status == 3) {
             // Sender can refund after reply deadline
             lockReason[_hashkey].status = 5;
-        } else if(isRecipent && block.timestamp >= lockReason[_hashkey].datetime && block.timestamp <= lockReason[_hashkey].replyDeadline ) {
+        } else if(isRecipent == 1 && block.timestamp >= lockReason[_hashkey].datetime && block.timestamp <= lockReason[_hashkey].replyDeadline ) {
             // recipient accept to refund back to sender
             lockReason[_hashkey].status = _status;
-            lockReason[_hashkey].recipientAgree = _status == 2;
-            lockReason[_hashkey].toCouncil = _status == 1;
+            lockReason[_hashkey].recipientAgree = _status == 2 ? 1 : 0;
+            lockReason[_hashkey].toCouncil = _status == 1 ? 1 : 0;
         }
         // return back to sender
         if(lockReason[_hashkey].status == 2 || lockReason[_hashkey].status == 5) {
             _processWithdraw(vault.getSender(_hashkey), address(0x0), 0, lockReason[_hashkey].refund);
             vault.subTotalBalance(lockReason[_hashkey].refund);
             vault.setAmount(_hashkey, vault.getAmount(_hashkey).sub(lockReason[_hashkey].refund));
-            vault.setStatus(_hashkey, vault.getAmount(_hashkey) == 0 ? false : true);
+            vault.setStatus(_hashkey, vault.getAmount(_hashkey) == 0 ? 0 : 1);
         }
     }
     
@@ -378,25 +378,27 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         require(msg.sender == vault.getSender(_hashkey), 'Only sender can change this cheque to at sight');
         if(vault.getEffectiveTime(_hashkey) > block.timestamp) {
           vault.setEffectiveTime(_hashkey, block.timestamp);
-          vault.setLockable(_hashkey, false);
-          vault.setCanEndorse(_hashkey, true);
+          vault.setLockable(_hashkey, 0);
+          vault.setCanEndorse(_hashkey, 1);
         }
         return true;
     }
     
-    function setCanEndorse(bytes32 _hashkey, bool status) external nonReentrant returns(bool) {
+    function setCanEndorse(bytes32 _hashkey, uint256 status) external nonReentrant returns(bool) {
         require(msg.sender == vault.getSender(_hashkey), 'Only sender can change endorsable');
         vault.setCanEndorse(_hashkey, status);
+        return true;
     }
 
-    function setLockable(bytes32 _hashKey, bool status) external nonReentrant returns(bool) {
+    function setLockable(bytes32 _hashKey, uint256 status) external nonReentrant returns(bool) {
         require(msg.sender == vault.getSender(_hashKey), 'Only sender can change lockable');
-        require(vault.getLockable(_hashKey) && !status, 'Can only change from lockable to non-lockable');
+        require(vault.getLockable(_hashKey) == 1 && status == 0, 'Can only change from lockable to non-lockable');
         vault.setLockable(_hashKey, status);
-        vault.setCanEndorse(_hashKey, true);
+        vault.setCanEndorse(_hashKey, 1);
+        return true;
     }
 
-    function getDepositDataByHashkey(bytes32 _hashkey) external view returns(uint256 effectiveTime, uint256 amount, bool lockable, bool canEndorse) {
+    function getDepositDataByHashkey(bytes32 _hashkey) external view returns(uint256 effectiveTime, uint256 amount, uint256 lockable, uint256 canEndorse) {
         effectiveTime = vault.getEffectiveTime(_hashkey);
         amount = vault.getAmount(_hashkey);
         lockable = vault.getLockable(_hashkey);

@@ -24,13 +24,13 @@ contract Vault {
     uint256 public totalBalance = 0; // Total balance of deposit after Withdrawal
 
     struct Commitment {                 // Deposit Commitment
-        bool            status;             // If there is no this commitment or balance is zeor, false
+        uint256         status;             // If there is no this commitment or balance is zeor, false
         uint256         amount;             // Deposit balance
         address payable sender;         // Who make this deposit
         uint256         effectiveTime;      // Forward cheque time
         uint256         timestamp;          // Deposit timestamp
-        bool            canEndorse;
-        bool            lockable;           // If can be locked/refund
+        uint256         canEndorse;
+        uint256         lockable;           // If can be locked/refund
         uint256         params1;
         uint256         params2;
         uint256         params3;
@@ -69,7 +69,7 @@ contract Vault {
         erc20 = ERC20(erc20Address);
     }
 
-    function setStatus(bytes32 _hashkey, bool _status) external onlyShaker {
+    function setStatus(bytes32 _hashkey, uint256 _status) external onlyShaker {
         commitments[_hashkey].status = _status;
     }
     
@@ -89,11 +89,11 @@ contract Vault {
         commitments[_hashkey].timestamp = _timestamp;
     }
     
-    function setCanEndorse(bytes32 _hashkey, bool _canEndorse) external onlyShaker {
+    function setCanEndorse(bytes32 _hashkey, uint256 _canEndorse) external onlyShaker {
         commitments[_hashkey].canEndorse = _canEndorse;
     }
     
-    function setLockable(bytes32 _hashkey, bool _lockable) external onlyShaker {
+    function setLockable(bytes32 _hashkey, uint256 _lockable) external onlyShaker {
         commitments[_hashkey].lockable = _lockable;
     }
 
@@ -114,7 +114,7 @@ contract Vault {
     }
     
     
-    function getStatus(bytes32 _hashkey) external view onlyShaker returns(bool) {
+    function getStatus(bytes32 _hashkey) external view onlyShaker returns(uint256) {
         return commitments[_hashkey].status;
     }
     
@@ -134,11 +134,11 @@ contract Vault {
         return commitments[_hashkey].timestamp;
     }
     
-    function getCanEndorse(bytes32 _hashkey) external view onlyShaker returns(bool) {
+    function getCanEndorse(bytes32 _hashkey) external view onlyShaker returns(uint256) {
         return commitments[_hashkey].canEndorse;
     }
     
-    function getLockable(bytes32 _hashkey) external view onlyShaker returns(bool) {
+    function getLockable(bytes32 _hashkey) external view onlyShaker returns(uint256) {
         return commitments[_hashkey].lockable;
     }    
 
