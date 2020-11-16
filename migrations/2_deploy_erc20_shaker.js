@@ -104,12 +104,6 @@ module.exports = function(deployer, network, accounts) {
     console.log(`*** Please approve dividend pool contract ${dividendPool.address} to use 100000 USDT from fee account ${FEE_ADDRESS} MANULLY`);
     console.log(`approve(${dividendPool.address}, 100000000000)`);
 
-    // Ajust params for Tron network
-    btchTokenManager = await ShakerTokenManager.deployed();
-    
-    btchTokenManager.setMinChargeFeeParams(10 * 10e6, 0, 180);
-    btchTokenManager.setMinMintAmount(10 * 10e6);
-
     // Testing
     console.log('\n====== TEST ======\n')
     shaker = await ERC20ShakerV2.deployed();

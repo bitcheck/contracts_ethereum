@@ -16,9 +16,12 @@ pragma solidity >=0.4.23 <0.6.0;
 import "./Mocks/BTCHToken.sol";
 import "./ReentrancyGuard.sol";
 import "./Mocks/SafeMath.sol";
+import "./Mocks/TransferHelper.sol";
 
 contract DividendPool is ReentrancyGuard {
     using SafeMath for uint256;
+    using TransferHelper for *;
+
     uint256 public totalBalance = 0;
     address public tokenAddress;    // BTCH
     address public dividentAddress; // USDT Token
@@ -36,9 +39,6 @@ contract DividendPool is ReentrancyGuard {
     mapping(address => uint256) private lastGettingDividentsTime;
     mapping(address => uint256) public balances;
 
-    BTCHToken public token;
-    ERC20 public dividentToken;
-
     modifier onlyOperator {
         require(msg.sender == operator, "Only operator can call this function.");
         _;
@@ -50,9 +50,7 @@ contract DividendPool is ReentrancyGuard {
       address _feeAddress
     ) public {
         tokenAddress = _tokenAddress;
-        token = BTCHToken(tokenAddress);
         dividentAddress = _dividentAddress;
-        dividentToken = ERC20(dividentAddress);
         operator = msg.sender;
         feeAddress = _feeAddress;
     }
@@ -60,9 +58,10 @@ contract DividendPool is ReentrancyGuard {
     function depositBTCH(uint256 amount) external nonReentrant {
         require(amount > 0);
         require(!(block.timestamp <= currentStartTimestamp + getDividentsTimeout) || !(block.timestamp >= currentStartTimestamp), "You can not deposit during taking divident time");
+        BTCHToken token = BTCHToken(tokenAddress);
         require(amount <= token.balanceOf(msg.sender), "Your balance is not enough");
         require(token.allowance(msg.sender, address(this)) >= amount, "Your allowance is not enough");
-        token.transferFrom(msg.sender, address(this), amount);
+        TransferHelper.safeTransferFrom(tokenAddress, msg.sender, address(this), amount);
         balances[msg.sender] = balances[msg.sender].add(amount);
         totalBalance = totalBalance.add(amount);
     }
@@ -71,7 +70,7 @@ contract DividendPool is ReentrancyGuard {
         require(amount > 0);
         require(!(block.timestamp <= currentStartTimestamp + getDividentsTimeout) || !(block.timestamp >= currentStartTimestamp), "You can not withdraw during taking divident time");
         require(amount <= balances[msg.sender], "Your deposit balance is not enough");
-        token.transfer(msg.sender, amount);
+        TransferHelper.safeTransfer(tokenAddress, msg.sender, amount);
         balances[msg.sender] = balances[msg.sender].sub(amount);
         totalBalance = totalBalance.sub(amount);
     }
@@ -79,7 +78,6 @@ contract DividendPool is ReentrancyGuard {
     function updateTokenAddress(address _addr) external onlyOperator nonReentrant {
       require(_addr != address(0));
       tokenAddress = _addr;
-      token = BTCHToken(tokenAddress);
     }
 
     function updateOperator(address _addr) external onlyOperator nonReentrant {
@@ -98,8 +96,8 @@ contract DividendPool is ReentrancyGuard {
     }
     
     function setDividentAddress(address _address) external onlyOperator {
+      require(_address != address(0));
       dividentAddress = _address;
-      dividentToken = ERC20(dividentAddress);
     }
 
     function setFeeAddress(address _address) external onlyOperator {
@@ -115,8 +113,8 @@ contract DividendPool is ReentrancyGuard {
       
       // Send Dividents
       // The fee account must approve the this contract enough allowance of USDT as dividend
-      require(dividentToken.allowance(feeAddress, address(this)) >= normalDividents, "Allowance not enough");
-      dividentToken.transferFrom(feeAddress, msg.sender, normalDividents);
+      require((ERC20(dividentAddress)).allowance(feeAddress, address(this)) >= normalDividents, "Allowance not enough");
+      TransferHelper.safeTransferFrom(dividentAddress, feeAddress, msg.sender, normalDividents);
       sentDividents = sentDividents.add(normalDividents);
       lastGettingDividentsTime[msg.sender] = block.timestamp;
       emit Dividend(msg.sender, normalDividents, block.timestamp);
