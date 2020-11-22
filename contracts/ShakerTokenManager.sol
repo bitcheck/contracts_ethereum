@@ -15,6 +15,8 @@ pragma solidity >=0.4.23 <0.6.0;
 
 import "./Mocks/BTCHToken.sol";
 import "./Mocks/ERC20.sol";
+import "./Mocks/BCTToken.sol";
+import "./Mocks/TokenLocker.sol";
 import "./ReentrancyGuard.sol";
 
 /**
@@ -57,12 +59,20 @@ contract ShakerTokenManager is ReentrancyGuard {
     uint256 public minChargeFeeRate = 180; // percent rate of special charge, if need to charge 1.5%, this will be set 150
     uint256 public minMintAmount = 10 * 10 ** depositTokenDecimals;
     uint256 public taxRate = 2000;// means 20%
-    uint256 public depositerShareRate = 5000; // depositer and withdrawer will share the bonus, this rate is for sender(depositer). 5000 means 0.500, 50%;
+    uint256 public depositerShareRate = 5000; // depositer and withdrawer will share the bonus, this rate is for sender(depositer). 5000 means 50%;
     
-    address public operator;
-    address public taxBereauAddress; // address to get tax
-    address public shakerContractAddress;
-    address public tokenAddress; // BTCH token
+    uint256 public bctHolderShareRate = 10000; // if depositer is BCT holder, the depositer and withdrawer will share the bonus according to this rate. 10000 means 100%
+    uint256 public bctHolderMultiplier = 5;
+    uint256 public bctHolderSpecialTotalSupply = 1500000 * 10 ** 6;
+    
+    address public operator;                      // operator address
+    address public taxBereauAddress;              // address to get tax
+
+    address public tokenAddress;                  // BTCH token
+    address public bctAddress;                    // BCT (Bitcheck commitee token) address
+
+    address public shakerContractAddress;         // Shaker contract address
+    address public tokenLockerAddress;            // TokenLocker contract address
 
     BTCHToken public token = BTCHToken(tokenAddress);
 
@@ -76,20 +86,44 @@ contract ShakerTokenManager is ReentrancyGuard {
         _;
     }
     
-    constructor(address _shakerContractAddress, address _taxBereauAddress) public {
+    constructor(
+      address _shakerContractAddress, 
+      address _taxBereauAddress, 
+      address _tokenAddress, 
+      address _bctAddress,
+      address _tokenLockerAddress
+    ) public {
         operator = msg.sender;
         shakerContractAddress = _shakerContractAddress;
         taxBereauAddress = _taxBereauAddress;
+        tokenAddress = _tokenAddress;
+        bctAddress = _bctAddress;
+        tokenLockerAddress = _tokenLockerAddress;
     }
     
     function sendBonus(uint256 _amount, uint256 _hours, address _depositer, address _withdrawer) external nonReentrant onlyShaker returns(bool) {
-        uint256 mintAmount = this.getMintAmount(_amount, _hours);
+        (uint256 mintAmount, bool isBCTHolder) = this.getMintAmount(_amount, _hours, _depositer);
         if(mintAmount == 0) return true;
         uint256 tax = mintAmount.mul(taxRate).div(10000);
         uint256 notax = mintAmount.sub(tax);
         if(notax > 0) {
-          token.mint(_depositer, (notax.mul(depositerShareRate).div(10000)));
-          token.mint(_withdrawer, (notax.mul(uint256(10000).sub(depositerShareRate)).div(10000)));
+          uint256 shareRate = isBCTHolder ? bctHolderShareRate : depositerShareRate;
+          uint256 depositAmount = (notax.mul(shareRate).div(10000));
+          uint256 withdrawalAmount = (notax.mul(uint256(10000).sub(shareRate)).div(10000));
+          if(isBCTHolder) {
+            // set tokenLocker
+            if(depositAmount > 0) {
+              TokenLocker(tokenLockerAddress).setVestToken(_depositer, depositAmount);
+              token.mint(tokenLockerAddress, depositAmount);
+            }
+            if(withdrawalAmount > 0) {
+              TokenLocker(tokenLockerAddress).setVestToken(_withdrawer, withdrawalAmount);
+              token.mint(tokenLockerAddress, withdrawalAmount);
+            }
+          } else {
+            if(depositAmount > 0) token.mint(_depositer, depositAmount);
+            if(withdrawalAmount > 0) token.mint(_withdrawer, withdrawalAmount);
+          }
         }
         if(tax > 0) token.mint(taxBereauAddress, tax);
         return true;
@@ -100,17 +134,26 @@ contract ShakerTokenManager is ReentrancyGuard {
         return true;
     }
     
-    function getMintAmount(uint256 _amount, uint256 _hours ) external view returns(uint256) {
+    function getMintAmount(uint256 _amount, uint256 _hours, address _depositer) external view returns(uint256, bool) {
         // return back bonus token amount with decimals
         require(_amount < 1e18);
-        if(_amount <= minMintAmount) return 0;
+        if(_amount <= minMintAmount) return (0, false);
         uint256 amountExponented = getExponent(_amount);
         uint256 stageFactor = getStageFactor();
         uint256 intervalFactor = getIntervalFactor(_hours);
         uint256 priceFactor = getPriceElasticFactor();
-        return amountExponented.mul(priceFactor).mul(baseFactor).mul(intervalFactor).mul(stageFactor).div(1e11);
+        uint256 bctMultiplier = getBCTBalance(_depositer);
+        bool b = bctMultiplier > 0 && token.totalSupply() < bctHolderSpecialTotalSupply;
+        bctMultiplier = b ? bctMultiplier.mul(bctHolderMultiplier) : 1;
+        uint256 re = amountExponented.mul(priceFactor).mul(baseFactor).mul(intervalFactor).mul(stageFactor);
+        re = re.div(1e11).mul(bctMultiplier);
+        return (re, b);
     }
     
+    function revokeVestToken(address _address) external {
+        TokenLocker(tokenLockerAddress).revoke(_address);
+    }
+
     function getFee(uint256 _amount) external view returns(uint256) {
         // return fee amount, including decimals
         require(_amount < 1e18);
@@ -262,4 +305,27 @@ contract ShakerTokenManager is ReentrancyGuard {
         operator = _newOperator;
     }
 
+    function getBCTBalance(address _address) internal view returns(uint256) {
+        return BCTToken(bctAddress).balanceOf(_address);
+    }
+
+    function setBCTAddress(address _address) external onlyOperator {
+        require(_address != address(0));
+        bctAddress = _address;
+    }
+
+    function setBCTHolderMultiplier(uint256 _multiplier) external onlyOperator {
+      bctHolderMultiplier = _multiplier;
+    }
+
+    function setBCTHolderShareRate(uint256 _shareRate) external onlyOperator {
+      require(_shareRate >= 0 && _shareRate <= 10000);
+      bctHolderShareRate = _shareRate;
+    }
+    function setTokenLockerAddress(address _address) external onlyOperator {
+      tokenLockerAddress = _address;
+    }
+    function setBCTHolderSpecialTotalSupply(uint256 _specialTotalSupply) external onlyOperator {
+      bctHolderSpecialTotalSupply = _specialTotalSupply;
+    }
 }

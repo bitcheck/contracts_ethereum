@@ -6,15 +6,22 @@ const BTCHToken = artifacts.require('./Mocks/BTCHToken.sol')
 const ShakerTokenManager = artifacts.require('./ShakerTokenManager.sol')
 const DividendPool = artifacts.require('./DividendPool.sol');
 const Vault = artifacts.require('./Vault.sol');
+const BCTToken = artifacts.require('./Mocks/BCTToken.sol');
+const TokenLocker = artifacts.require('./Mocks/TokenLocker.sol');
 
 module.exports = function(deployer, network, accounts) {
   return deployer.then(async () => {
-    const { ERC20_TOKEN, SHAKER_ADDRESS, FEE_ADDRESS, BTCH_TOKEN, BTCH_TOKEN_MANAGER, DIVIDEND_POOL, TAX_BEREAU, VAULT_ADDRESS } = process.env
+    const { ERC20_TOKEN, SHAKER_ADDRESS, FEE_ADDRESS, BTCH_TOKEN, BTCH_TOKEN_MANAGER, DIVIDEND_POOL, TAX_BEREAU, VAULT_ADDRESS, BCT_TOKEN, TOKEN_LOCKER } = process.env
 
     // Step 1: Deploy Test USDT, if on mainnet, set the real USDT address in .env
     let token = ERC20_TOKEN
     if(token === '') token = (await deployer.deploy(Token)).address
     console.log('Test USDT Token\'s address\n===> ', token);
+
+    let bct = BCT_TOKEN;
+    // if(bct === '') bct = (await deployer.deploy(BCTToken)).address;
+    // else bct = await BCTToken.deployed();
+    // console.log('BCT Token\'s address\n===> ', bct);
 
     var vault = VAULT_ADDRESS
     if(vault === '') {
@@ -42,7 +49,7 @@ module.exports = function(deployer, network, accounts) {
     await shaker.updateVault(vault.address);
     console.log('ShakerV2\'s address \n===> ', shaker.address)
     vault = await Vault.deployed();
-    await vault.updateShakerAddress(shaker.address, 10000000 * 10e6); // Approve shaker contract to use vault
+    // await vault.updateShakerAddress(shaker.address, 10000000 * 10e6); // Approve shaker contract to use vault
 
     // Step 3: Deploy BTCHToken Manager
     let btchTokenManager = BTCH_TOKEN_MANAGER
@@ -69,10 +76,30 @@ module.exports = function(deployer, network, accounts) {
     console.log('BTCH Token\'s address\n===> ', btchToken.address);
     console.log('BTCH Token has bound Token Manager\'s address \n===> ', btchTokenManager.address);
 
+    let tokenLocker = TOKEN_LOCKER
+    if(tokenLocker === '') {
+      tokenLocker = await deployer.deploy(
+        TokenLocker,
+        btchTokenManager.address,
+        btchToken.address,
+        60,             //cliff is 1 minute
+        86400             // duration is 1 day
+      )
+    } else {
+      tokenLocker = await TokenLocker.deployed();
+    }
+    console.log('TokenLock\'s address \n===> ', tokenLocker.address);
+
     // Step 5: 
     btchTokenManager = await ShakerTokenManager.deployed();
+    await btchTokenManager.setTokenLockerAddress(tokenLocker.address);
+    console.log('Token Manager has bound TokenLocker\'s address\n===> ', tokenLocker.address);
+
     await btchTokenManager.setTokenAddress(btchToken.address);
     console.log('Token Manager has bound BTCH Token\'s address\n===> ', btchToken.address);
+
+    await btchTokenManager.setBCTAddress(bct);
+    console.log('Token Manager has bound BCT Token\'s address\n===> ', bct);
 
     // Step 6:
     await btchToken.updateAuthorizedContract(btchTokenManager.address);
