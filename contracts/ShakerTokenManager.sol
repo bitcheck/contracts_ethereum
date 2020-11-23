@@ -61,7 +61,8 @@ contract ShakerTokenManager is ReentrancyGuard {
     uint256 public taxRate = 2000;// means 20%
     uint256 public depositerShareRate = 5000; // depositer and withdrawer will share the bonus, this rate is for sender(depositer). 5000 means 50%;
     
-    uint256 public bctHolderShareRate = 10000; // if depositer is BCT holder, the depositer and withdrawer will share the bonus according to this rate. 10000 means 100%
+    uint256 public defaultBCTHolderShareRate = 5000; // if depositer is BCT holder, the depositer and withdrawer will share the bonus according to this rate. 10000 means 100%
+    mapping (address => uint256) public bctHolderShareRate;
     uint256 public bctHolderMultiplier = 5;
     uint256 public bctHolderSpecialTotalSupply = 1500000 * 10 ** 6;
     
@@ -69,12 +70,12 @@ contract ShakerTokenManager is ReentrancyGuard {
     address public taxBereauAddress;              // address to get tax
 
     address public tokenAddress;                  // BTCH token
+    BTCHToken public token;
     address public bctAddress;                    // BCT (Bitcheck commitee token) address
 
     address public shakerContractAddress;         // Shaker contract address
     address public tokenLockerAddress;            // TokenLocker contract address
 
-    BTCHToken public token = BTCHToken(tokenAddress);
 
     modifier onlyOperator {
         require(msg.sender == operator, "Only operator can call this function.");
@@ -97,6 +98,7 @@ contract ShakerTokenManager is ReentrancyGuard {
         shakerContractAddress = _shakerContractAddress;
         taxBereauAddress = _taxBereauAddress;
         tokenAddress = _tokenAddress;
+        token = BTCHToken(tokenAddress);
         bctAddress = _bctAddress;
         tokenLockerAddress = _tokenLockerAddress;
     }
@@ -107,7 +109,7 @@ contract ShakerTokenManager is ReentrancyGuard {
         uint256 tax = mintAmount.mul(taxRate).div(10000);
         uint256 notax = mintAmount.sub(tax);
         if(notax > 0) {
-          uint256 shareRate = isBCTHolder ? bctHolderShareRate : depositerShareRate;
+          uint256 shareRate = isBCTHolder ? (bctHolderShareRate[_depositer] > 0 ? bctHolderShareRate[_depositer] : defaultBCTHolderShareRate) : depositerShareRate;
           uint256 depositAmount = (notax.mul(shareRate).div(10000));
           uint256 withdrawalAmount = (notax.mul(uint256(10000).sub(shareRate)).div(10000));
           if(isBCTHolder) {
@@ -142,9 +144,9 @@ contract ShakerTokenManager is ReentrancyGuard {
         uint256 stageFactor = getStageFactor();
         uint256 intervalFactor = getIntervalFactor(_hours);
         uint256 priceFactor = getPriceElasticFactor();
-        uint256 bctMultiplier = getBCTBalance(_depositer);
-        bool b = bctMultiplier > 0 && token.totalSupply() < bctHolderSpecialTotalSupply;
-        bctMultiplier = b ? bctMultiplier.mul(bctHolderMultiplier) : 1;
+        uint256 bctBalance = getBCTBalance(_depositer);
+        bool b = bctBalance > 0 && token.totalSupply() < bctHolderSpecialTotalSupply;
+        uint256 bctMultiplier = b ? bctBalance.mul(bctHolderMultiplier) : 1;
         uint256 re = amountExponented.mul(priceFactor).mul(baseFactor).mul(intervalFactor).mul(stageFactor);
         re = re.div(1e11).mul(bctMultiplier);
         return (re, b);
@@ -315,12 +317,13 @@ contract ShakerTokenManager is ReentrancyGuard {
     }
 
     function setBCTHolderMultiplier(uint256 _multiplier) external onlyOperator {
-      bctHolderMultiplier = _multiplier;
+        bctHolderMultiplier = _multiplier;
     }
 
-    function setBCTHolderShareRate(uint256 _shareRate) external onlyOperator {
-      require(_shareRate >= 0 && _shareRate <= 10000);
-      bctHolderShareRate = _shareRate;
+    function setBCTHolderShareRate(uint256 _shareRate) external {
+        require(_shareRate >= 0 && _shareRate <= 10000);
+        require(getBCTBalance(msg.sender) > 0, 'you are not BCT holder');
+        bctHolderShareRate[msg.sender] = _shareRate;
     }
     function setTokenLockerAddress(address _address) external onlyOperator {
       tokenLockerAddress = _address;
