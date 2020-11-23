@@ -7,8 +7,8 @@ contract TokenLocker {
   using SafeMath for uint256;
   using TransferHelper for *;
 
-  event Released(address addr, uint256 amount);
-  event Revoked(address addr, uint256 amount);
+  event Released(address addr, uint256 amount, uint256 timestamp);
+  event Revoked(address addr, uint256 amount, uint256 timestamp);
 
   address public operator;
   address public tokenManager;
@@ -85,7 +85,7 @@ contract TokenLocker {
     require(balance >= unreleased, "Balance not enough");
     released[addr] = released[addr].add(unreleased);
     TransferHelper.safeTransfer(token, addr, unreleased);
-    emit Released(addr, unreleased);
+    emit Released(addr, unreleased, block.timestamp);
   }
 
   /**
@@ -99,7 +99,7 @@ contract TokenLocker {
     uint256 balance = ERC20(token).balanceOf(address(this));
     released[addr] = released[addr].add(balance);
     TransferHelper.safeTransfer(token, operator, balance);
-    emit Revoked(addr, balance);
+    emit Revoked(addr, balance, block.timestamp);
   }
 
   /**
