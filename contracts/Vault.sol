@@ -164,7 +164,7 @@ contract Vault {
 
     function updateShakerAddress(address _shaker, uint256 _allowance) external onlyOperator returns(bool) {
         shakerContractAddress = _shaker;
-        // Approve shaker contract
+        // Approve shaker contract, you have do twice to re-approve USDT: 1st approve 0, then approve the new amount.
         safeApprove(erc20Address, _shaker, _allowance);
         return true;
     }
