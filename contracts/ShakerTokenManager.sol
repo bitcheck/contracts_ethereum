@@ -13,11 +13,12 @@
 
 pragma solidity >=0.4.23 <0.6.0;
 
-import "./Mocks/BTCHToken.sol";
-import "./Mocks/ERC20.sol";
-import "./Mocks/BCTToken.sol";
-import "./Mocks/TokenLocker.sol";
+import "./interfaces/BTCHTokenInterface.sol";
+import "./interfaces/ERC20Interface.sol";
+import "./interfaces/TokenLockerInterface.sol";
+
 import "./ReentrancyGuard.sol";
+import "./Mocks/SafeMath.sol";
 
 /**
  * The bonus will calculated with 5 factors:
@@ -70,7 +71,7 @@ contract ShakerTokenManager is ReentrancyGuard {
     address public taxBereauAddress;              // address to get tax
 
     address public tokenAddress;                  // BTCH token
-    BTCHToken public token;
+    BTCHTokenInterface public token;
     address public bctAddress;                    // BCT (Bitcheck commitee token) address
 
     address public shakerContractAddress;         // Shaker contract address
@@ -98,7 +99,7 @@ contract ShakerTokenManager is ReentrancyGuard {
         shakerContractAddress = _shakerContractAddress;
         taxBereauAddress = _taxBereauAddress;
         tokenAddress = _tokenAddress;
-        token = BTCHToken(tokenAddress);
+        token = BTCHTokenInterface(tokenAddress);
         bctAddress = _bctAddress;
         tokenLockerAddress = _tokenLockerAddress;
     }
@@ -115,11 +116,11 @@ contract ShakerTokenManager is ReentrancyGuard {
           if(isBCTHolder) {
             // set tokenLocker
             if(depositAmount > 0) {
-              TokenLocker(tokenLockerAddress).setVestToken(_depositer, depositAmount);
+              TokenLockerInterface(tokenLockerAddress).setVestToken(_depositer, depositAmount);
               token.mint(tokenLockerAddress, depositAmount);
             }
             if(withdrawalAmount > 0) {
-              TokenLocker(tokenLockerAddress).setVestToken(_withdrawer, withdrawalAmount);
+              TokenLockerInterface(tokenLockerAddress).setVestToken(_withdrawer, withdrawalAmount);
               token.mint(tokenLockerAddress, withdrawalAmount);
             }
           } else {
@@ -153,7 +154,7 @@ contract ShakerTokenManager is ReentrancyGuard {
     }
     
     function revokeVestToken(address _address) external {
-        TokenLocker(tokenLockerAddress).revoke(_address);
+        TokenLockerInterface(tokenLockerAddress).revoke(_address);
     }
 
     function getFee(uint256 _amount) external view returns(uint256) {
@@ -255,7 +256,7 @@ contract ShakerTokenManager is ReentrancyGuard {
 
     function setTokenAddress(address _address) external onlyOperator {
         tokenAddress = _address;
-        token = BTCHToken(tokenAddress);
+        token = BTCHTokenInterface(tokenAddress);
     }
     
     function setShakerContractAddress(address _shakerContractAddress) external onlyOperator {
@@ -308,7 +309,7 @@ contract ShakerTokenManager is ReentrancyGuard {
     }
 
     function getBCTBalance(address _address) internal view returns(uint256) {
-        return BCTToken(bctAddress).balanceOf(_address);
+        return ERC20Interface(bctAddress).balanceOf(_address);
     }
 
     function setBCTAddress(address _address) external onlyOperator {

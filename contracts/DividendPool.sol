@@ -13,7 +13,9 @@
 
 pragma solidity >=0.4.23 <0.6.0;
 
-import "./Mocks/BTCHToken.sol";
+import "./interfaces/BTCHTokenInterface.sol";
+import "./interfaces/ERC20Interface.sol";
+
 import "./ReentrancyGuard.sol";
 import "./Mocks/SafeMath.sol";
 import "./Mocks/TransferHelper.sol";
@@ -58,7 +60,7 @@ contract DividendPool is ReentrancyGuard {
     function depositBTCH(uint256 amount) external nonReentrant {
         require(amount > 0);
         require(!(block.timestamp <= currentStartTimestamp + getDividentsTimeout) || !(block.timestamp >= currentStartTimestamp), "You can not deposit during taking divident time");
-        BTCHToken token = BTCHToken(tokenAddress);
+        BTCHTokenInterface token = BTCHTokenInterface(tokenAddress);
         require(amount <= token.balanceOf(msg.sender), "Your balance is not enough");
         require(token.allowance(msg.sender, address(this)) >= amount, "Your allowance is not enough");
         TransferHelper.safeTransferFrom(tokenAddress, msg.sender, address(this), amount);
@@ -113,7 +115,7 @@ contract DividendPool is ReentrancyGuard {
       
       // Send Dividents
       // The fee account must approve the this contract enough allowance of USDT as dividend
-      require((ERC20(dividentAddress)).allowance(feeAddress, address(this)) >= normalDividents, "Allowance not enough");
+      require((ERC20Interface(dividentAddress)).allowance(feeAddress, address(this)) >= normalDividents, "Allowance not enough");
       TransferHelper.safeTransferFrom(dividentAddress, feeAddress, msg.sender, normalDividents);
       sentDividents = sentDividents.add(normalDividents);
       lastGettingDividentsTime[msg.sender] = block.timestamp;

@@ -13,12 +13,12 @@
 
 pragma solidity >=0.4.23 <0.6.0;
 
-import "./Mocks/ERC20.sol";
+import "./interfaces/ERC20Interface.sol";
 import "./Mocks/SafeMath.sol";
 
 contract Vault {
     using SafeMath for uint256;
-    ERC20 private erc20;
+    ERC20Interface private erc20;
     address public erc20Address;
     uint256 public totalAmount = 0; // Total amount of deposit
     uint256 public totalBalance = 0; // Total balance of deposit after Withdrawal
@@ -66,7 +66,7 @@ contract Vault {
     constructor(address _erc20Address) public {
         operator = msg.sender;
         erc20Address = _erc20Address;
-        erc20 = ERC20(erc20Address);
+        erc20 = ERC20Interface(erc20Address);
     }
 
     function setStatus(bytes32 _hashkey, uint256 _status) external onlyShaker {

@@ -13,10 +13,12 @@
 
 pragma solidity >=0.4.23 <0.6.0;
 
+import "./interfaces/ShakerTokenManagerInterface.sol";
+import "./interfaces/VaultInterface.sol";
+
 import "./ReentrancyGuard.sol";
 import "./StringUtils.sol";
-import "./ShakerTokenManager.sol";
-import "./Vault.sol";
+import "./Mocks/SafeMath.sol";
 
 contract ShakerV2 is ReentrancyGuard, StringUtils {
     using SafeMath for uint256;
@@ -27,9 +29,9 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
     uint256 public councilJudgementFeeRate = 1700; // If the desired rate is 17%, commonFeeRate should set to 1700
     uint256 public minReplyHours = 24;
 
-    ShakerTokenManager public tokenManager;
+    ShakerTokenManagerInterface public tokenManager;
     address public vaultAddress;
-    Vault public vault;
+    VaultInterface public vault;
     
     mapping(address => address) private relayerWithdrawAddress;
     
@@ -81,7 +83,7 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         councilAddress = _operator;
         commonWithdrawAddress = _commonWithdrawAddress;
         vaultAddress = _vaultAddress;
-        vault = Vault(vaultAddress);
+        vault = VaultInterface(vaultAddress);
     }
 
     function depositERC20Batch(
@@ -411,12 +413,12 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
     }
     
     function updateBonusTokenManager(address _BonusTokenManagerAddress) external nonReentrant onlyOperator {
-        tokenManager = ShakerTokenManager(_BonusTokenManagerAddress);
+        tokenManager = ShakerTokenManagerInterface(_BonusTokenManagerAddress);
     }
     
     function updateVault(address _vaultAddress) external nonReentrant onlyOperator {
         vaultAddress = _vaultAddress;
-        vault = Vault(_vaultAddress);
+        vault = VaultInterface(_vaultAddress);
     }
     
     function getJudgementFee(uint256 _amount) internal view returns(uint256) {

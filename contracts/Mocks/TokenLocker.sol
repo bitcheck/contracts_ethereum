@@ -1,7 +1,8 @@
 pragma solidity >=0.4.23 <0.6.0;
 
-import "./ERC20.sol";
+import "../interfaces/ERC20Interface.sol";
 import "./TransferHelper.sol";
+import "./SafeMath.sol";
 
 contract TokenLocker {
   using SafeMath for uint256;
@@ -81,7 +82,7 @@ contract TokenLocker {
     require(!revoked[addr], 'This account is revoked');
     uint256 unreleased = releasableAmount(addr);
     require(unreleased > 0, "unreleased can not be zero");
-    uint256 balance = ERC20(token).balanceOf(address(this));
+    uint256 balance = ERC20Interface(token).balanceOf(address(this));
     require(balance >= unreleased, "Balance not enough");
     released[addr] = released[addr].add(unreleased);
     TransferHelper.safeTransfer(token, addr, unreleased);
@@ -96,7 +97,7 @@ contract TokenLocker {
   function revoke(address addr) public onlyOperator {
     require(revoked[addr], 'This account is not revokable');
 
-    uint256 balance = ERC20(token).balanceOf(address(this));
+    uint256 balance = ERC20Interface(token).balanceOf(address(this));
     released[addr] = released[addr].add(balance);
     TransferHelper.safeTransfer(token, operator, balance);
     emit Revoked(addr, balance, block.timestamp);
