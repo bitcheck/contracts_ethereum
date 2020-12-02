@@ -19,11 +19,11 @@ contract ERC20ShakerV2 is ShakerV2 {
   address public token;
 
   constructor(
-    address _operator,
     address _commonWithdrawAddress,
     address _token,
-    address _vaultAddress
-  ) ShakerV2(_operator, _commonWithdrawAddress, _vaultAddress) public {
+    address _vaultAddress,
+    address _disputeAddress
+  ) ShakerV2(msg.sender, _commonWithdrawAddress, _vaultAddress, _disputeAddress, _token) public {
     token = _token;
   }
 

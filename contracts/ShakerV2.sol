@@ -15,6 +15,8 @@ pragma solidity >=0.4.23 <0.6.0;
 
 import "./interfaces/ShakerTokenManagerInterface.sol";
 import "./interfaces/VaultInterface.sol";
+import "./interfaces/DisputeInterface.sol";
+import "./interfaces/ERC20Interface.sol";
 
 import "./ReentrancyGuard.sol";
 import "./StringUtils.sol";
@@ -25,40 +27,25 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
 
     address public operator;            // Super operator account to control the contract
     address public councilAddress;      // Council address of DAO
+    address public tokenAddress;        // USDT token
     uint256 public councilJudgementFee = 0; // Council charge for judgement
     uint256 public councilJudgementFeeRate = 1700; // If the desired rate is 17%, commonFeeRate should set to 1700
+    uint256 public compensationRate = 2000;
     uint256 public minReplyHours = 24;
 
     ShakerTokenManagerInterface public tokenManager;
+    
     address public vaultAddress;
     VaultInterface public vault;
+    
+    address public disputeAddress;
+    DisputeInterface public dispute;
     
     mapping(address => address) private relayerWithdrawAddress;
     
     // If the msg.sender(relayer) has not registered Withdrawal address, the fee will send to this address
     address public commonWithdrawAddress; 
     
-    // If withdrawal is not throught relayer, use this common fee. Be care of decimal of token
-    // uint256 public commonFee = 0; 
-    
-    // If withdrawal is not throught relayer, use this rate. Total fee is: commoneFee + amount * commonFeeRate. 
-    // If the desired rate is 4%, commonFeeRate should set to 400
-    // uint256 public commonFeeRate = 25; // 0.25% 
-    
-    struct LockReason {
-        string  description;
-        uint256   status;         // 0- never happend, 1- locked, 2- confirm by recipient, 3- unlocked by council, 4- cancel refund by sender, 5- refund by sender himself
-        uint256 datetime;       // Lock date
-        uint256 replyDeadline;  // If the recipent don't reply(confirm or don't confirm) during this time, the sender can refund 
-        uint256 refund;
-        address payable locker;
-        uint256 recipientAgree;
-        uint256 senderAgree;
-        uint256 toCouncil;
-    }
-    // locakReason key is hashKey = hash(commitment, recipient)
-    mapping(bytes32 => LockReason) private lockReason;
-
     modifier onlyOperator {
         require(msg.sender == operator, "Only operator can call this function.");
         _;
@@ -77,13 +64,18 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
     constructor(
         address _operator,
         address _commonWithdrawAddress,
-        address _vaultAddress
+        address _vaultAddress,
+        address _disputeAddress,
+        address _tokenAddress
     ) public {
         operator = _operator;
         councilAddress = _operator;
         commonWithdrawAddress = _commonWithdrawAddress;
         vaultAddress = _vaultAddress;
         vault = VaultInterface(vaultAddress);
+        disputeAddress = _disputeAddress;
+        dispute = DisputeInterface(disputeAddress);
+        tokenAddress = _tokenAddress;
     }
 
     function depositERC20Batch(
@@ -122,6 +114,7 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
     }
 
     function _processDeposit(uint256 _amount, address _to) internal;
+    function _safeErc20TransferFrom(address _from, address _to, uint256 _amount) internal;
 
     function withdrawERC20Batch(
         bytes32[] calldata _commitments,
@@ -140,7 +133,7 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
     ) internal {
         bytes32 _hashkey = getHashkey(_commitment);
         require(vault.getAmount(_hashkey) > 0, 'The commitment of this recipient is not exist or used out');
-        require(lockReason[_hashkey].status != 1, 'This deposit was locked');
+        require(dispute.getStatus(_hashkey) != 1, 'This deposit was locked');
         uint256 refundAmount = _amount < vault.getAmount(_hashkey) ? _amount : vault.getAmount(_hashkey); //Take all if _refund == 0
         require(refundAmount > 0, "Refund amount can not be zero");
         require(block.timestamp >= vault.getEffectiveTime(_hashkey), "The deposit is locked until the effectiveTime");
@@ -186,7 +179,7 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         uint256 _effectiveTime
     ) internal {
         bytes32 _oldHashKey = getHashkey(_oldCommitment);
-        require(lockReason[_oldHashKey].status != 1, 'This deposit was locked');
+        require(dispute.getStatus(_oldHashKey) != 1, 'This deposit was locked');
         require(vault.getStatus(_oldHashKey) == 1, "Old commitment can not find");
         require(vault.getStatus(_newHashKey) == 0, "The new commitment has been submitted or used out");
         require(vault.getCanEndorse(_oldHashKey) == 1, "Old commitment can not endorse");
@@ -207,9 +200,7 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         vault.setAmount(_oldHashKey, vault.getAmount(_oldHashKey).sub(refundAmount));
         vault.setStatus(_oldHashKey, vault.getAmount(_oldHashKey) <= 0 ? 0 : 1);
 
-        // emit Withdrawal(_oldCommitment,  0, refundAmount, block.timestamp);
         vault.sendWithdrawEvent(_oldCommitment,  0, refundAmount, block.timestamp);
-        // emit Deposit(msg.sender, _newHashKey, refundAmount, block.timestamp);
         vault.sendDepositEvent(msg.sender, _newHashKey, refundAmount, block.timestamp);
     }
     
@@ -258,88 +249,80 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         bytes32             _hashkey,
         uint256             _refund,
         string   calldata   _description,
+        address payable     _recipient,
         uint256             _replyHours
     ) external payable nonReentrant {
-        _lock(_hashkey, _refund, _description, _replyHours);
+        _lock(_hashkey, _refund, _description, _recipient, _replyHours);
     }
     
     function _lock(
         bytes32 _hashkey,
         uint256 _refund,
         string memory _description,
+        address payable _recipient,
         uint256 _replyHours
     ) internal {
         require(msg.sender == vault.getSender(_hashkey), 'Locker must be sender');
         require(vault.getLockable(_hashkey) == 1, 'This commitment must be lockable');
         require(vault.getAmount(_hashkey) >= _refund, 'Balance amount must be enough');
         require(_replyHours >= minReplyHours, 'The reply days less than minReplyHours');
+        
+        // lock arbitration margin to Dispute contract
+        uint256 balance = ERC20Interface(tokenAddress).balanceOf(msg.sender);
+        uint256 refund = _refund == 0 ? vault.getAmount(_hashkey) : _refund;
+        uint256 judgementFee = getJudgementFee(refund);
+        require(balance >= judgementFee, "Sender balance is enough for arbitration ");
+        _safeErc20TransferFrom(msg.sender, disputeAddress, judgementFee);
 
-        lockReason[_hashkey] = LockReason(
+        dispute.setLockReason(
+            _hashkey,
             _description, 
             1,
-            block.timestamp,
             _replyHours * 3600 + block.timestamp,
-            _refund == 0 ? vault.getAmount(_hashkey) : _refund,
+            refund,
             msg.sender,
-            0,
+            _recipient,
+            judgementFee,
             0,
             0
         );
     }
     
-    function getLockReason(bytes32 _hashkey) public view returns(
-        string memory   description, 
-        uint256         status, 
-        uint256         datetime, 
-        uint256         replyDeadline,
-        uint256         currentTime,
-        uint256         refund, 
-        address         locker, 
-        uint256         recipientAgree,
-        uint256         senderAgree,
-        uint256         toCouncil
-    ) {
-        LockReason memory data = lockReason[_hashkey];
-        return (
-            data.description, 
-            data.status, 
-            data.datetime, 
-            data.replyDeadline,
-            block.timestamp,
-            data.refund, 
-            data.locker, 
-            data.recipientAgree,
-            data.senderAgree,
-            data.toCouncil
-        );
-    }
-    
-    function unlockByCouncil(bytes32 _hashkey, uint8 _result) external nonReentrant onlyCouncil {
-        // _result = 1: sender win
-        // _result = 2: recipient win
-        require(_result == 1 || _result == 2);
-        if(lockReason[_hashkey].status == 1 && lockReason[_hashkey].toCouncil == 1) {
-            lockReason[_hashkey].status = 3;
-            // If the council decided to return back money to the sender
-            uint256 councilFee = getJudgementFee(lockReason[_hashkey].refund);
-            if(_result == 1) {
-                _processWithdraw(lockReason[_hashkey].locker, councilAddress, councilFee, lockReason[_hashkey].refund);
-                vault.subTotalBalance(lockReason[_hashkey].refund);
-                vault.setAmount(_hashkey, vault.getAmount(_hashkey).sub(lockReason[_hashkey].refund));
-                vault.setStatus(_hashkey, vault.getAmount(_hashkey) == 0 ? 0 : 1);
-            } else {
-                lockReason[_hashkey].status = 3;
-                _safeErc20Transfer(councilAddress, councilFee);
-                vault.subTotalBalance(councilFee);
-                vault.setAmount(_hashkey, vault.getAmount(_hashkey).sub(councilFee));
-                vault.setStatus(_hashkey, vault.getAmount(_hashkey) == 0 ? 0 : 1);
-            }
-        }
-    }
+    // function unlockByCouncil(bytes32 _hashkey, uint8 _result) external nonReentrant onlyCouncil {
+    //     // _result = 1: sender win
+    //     // _result = 2: recipient win
+    //     require(_result == 1 || _result == 2);
+        
+    //     if(dispute.getStatus(_hashkey) == 1 && dispute.getToCouncil(_hashkey) == 1) {
+    //         dispute.setStatus(_hashkey, 3);
+    //         // If the council decided to return back money to the sender
+    //         uint256 councilFee = dispute.getFee(_hashkey);//getJudgementFee(dispute.getRefund(_hashkey));
+    //         uint256 compensation = councilFee.mul(compensationRate).div(10000);
+    //         if(_result == 1) {
+    //             uint256 refund = dispute.getRefund(_hashkey);
+    //             address payable sender = dispute.getLocker(_hashkey);
+    //             _processWithdraw(sender, address(0x0), 0, refund); // return back all refund
+    //             dispute.sendFeeTo(tokenAddress, sender, councilFee.add(compensation)); // return back arbitration fee deposit and compensation from recipient
+    //             dispute.sendFeeTo(tokenAddress, councilAddress, councilFee.sub(compensation)); // send arbitration fee from recipient to councilAddress
+    //             vault.subTotalBalance(refund);
+    //             vault.setAmount(_hashkey, vault.getAmount(_hashkey).sub(refund));
+    //             vault.setStatus(_hashkey, vault.getAmount(_hashkey) == 0 ? 0 : 1);
+    //         } else {
+    //             dispute.setStatus(_hashkey, 3);
+    //             address recipient = dispute.getRecipient(_hashkey);
+    //             dispute.sendFeeTo(tokenAddress, recipient, councilFee.add(compensation));  // return back arbitration fee and compensation from sender to recipient
+    //             dispute.sendFeeTo(tokenAddress, councilAddress, councilFee.sub(compensation));  // send arbitration fee from sender to councilAddress
+    //             vault.subTotalBalance(councilFee);
+    //             vault.setAmount(_hashkey, vault.getAmount(_hashkey).sub(councilFee));
+    //             vault.setStatus(_hashkey, vault.getAmount(_hashkey) == 0 ? 0 : 1);
+    //         }
+    //     }
+    // }
     
     /**
      * recipient should agree to let sender refund, otherwise, will bring to the council to make a judgement
      * This is 1st step if dispute happend
+     * status: 1 - deny, 2 - accept, 3 - dealing time passed
      */
     function unlockByRecipent(bytes32 _hashkey, bytes32 _commitment, uint8 _status) external nonReentrant {
         bytes32 _recipientHashKey = getHashkey(bytes32ToString(_commitment));
@@ -348,27 +331,40 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
 
         require(isSender == 1 || isRecipent == 1, 'Must be called by recipient or original sender');
         require(_status == 1 || _status == 2 || _status == 3, 'params can only be 1,2,3');
-        require(lockReason[_hashkey].status == 1, 'This commitment is not locked');
+        require(dispute.getStatus(_hashkey) == 1, 'This commitment is not locked');
 
-        if(isSender == 1 && block.timestamp >= lockReason[_hashkey].datetime && _status != 3) {
+        if(isSender == 1 && block.timestamp >= dispute.getDatetime(_hashkey) && _status != 3) {
             // Sender accept to keep cheque available
-            lockReason[_hashkey].status = _status == 2 ? 4 : 1;
-            lockReason[_hashkey].senderAgree = _status == 2 ? 1 : 0;
-            lockReason[_hashkey].toCouncil = _status == 1 ? 1 : 0;
-        } else if(isSender == 1 && block.timestamp >= lockReason[_hashkey].replyDeadline && _status == 3) {
+            dispute.setStatus(_hashkey, _status == 2 ? 4 : 1);
+            dispute.setToCouncil(_hashkey, _status == 1 ? 1 : 0);
+            if(_status == 2) {
+                // cancel refund and return back arbitration fee ######
+                dispute.sendFeeTo(tokenAddress, dispute.getLocker(_hashkey), dispute.getFee(_hashkey)); 
+            }
+        } else if(isSender == 1 && block.timestamp >= dispute.getReplyDeadline(_hashkey) && _status == 3) {
             // Sender can refund after reply deadline
-            lockReason[_hashkey].status = 5;
-        } else if(isRecipent == 1 && block.timestamp >= lockReason[_hashkey].datetime && block.timestamp <= lockReason[_hashkey].replyDeadline ) {
-            // recipient accept to refund back to sender
-            lockReason[_hashkey].status = _status;
-            lockReason[_hashkey].recipientAgree = _status == 2 ? 1 : 0;
-            lockReason[_hashkey].toCouncil = _status == 1 ? 1 : 0;
+            dispute.setStatus(_hashkey, 5);
+        } else if(isRecipent == 1 && block.timestamp >= dispute.getDatetime(_hashkey) && block.timestamp <= dispute.getReplyDeadline(_hashkey)) {
+            // recipient accept or refuse to refund back to sender
+            if(_status == 1) {
+                // refuse to refund
+                address payable recipient = dispute.getRecipient(_hashkey);
+                uint256 balance = ERC20Interface(tokenAddress).balanceOf(recipient);
+                uint256 judgementFee =  getJudgementFee(dispute.getRefund(_hashkey));
+                require(balance >= judgementFee, "recipient balance is enough for arbitration ");
+                _safeErc20TransferFrom(msg.sender, disputeAddress, judgementFee);
+            }
+            dispute.setStatus(_hashkey, _status);
+            dispute.setRecipientAgree(_hashkey, _status == 2 ? 1 : 0);
+            dispute.setToCouncil(_hashkey, _status == 1 ? 1 : 0);
         }
         // return back to sender
-        if(lockReason[_hashkey].status == 2 || lockReason[_hashkey].status == 5) {
-            _processWithdraw(vault.getSender(_hashkey), address(0x0), 0, lockReason[_hashkey].refund);
-            vault.subTotalBalance(lockReason[_hashkey].refund);
-            vault.setAmount(_hashkey, vault.getAmount(_hashkey).sub(lockReason[_hashkey].refund));
+        if(dispute.getStatus(_hashkey) == 2 || dispute.getStatus(_hashkey) == 5) {
+            uint256 refund = dispute.getRefund(_hashkey);
+            _processWithdraw(vault.getSender(_hashkey), address(0x0), 0, refund);
+            dispute.sendFeeTo(tokenAddress, vault.getSender(_hashkey), dispute.getFee(_hashkey));
+            vault.subTotalBalance(refund);
+            vault.setAmount(_hashkey, vault.getAmount(_hashkey).sub(refund));
             vault.setStatus(_hashkey, vault.getAmount(_hashkey) == 0 ? 0 : 1);
         }
     }
@@ -407,9 +403,13 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         canEndorse = vault.getCanEndorse(_hashkey);
     }
     
-    function updateCouncilJudgementFee(uint256 _fee, uint256 _rate) external nonReentrant onlyCouncil {
+    function updateCouncilJudgementFee(uint256 _fee, uint256 _rate) external nonReentrant onlyOperator {
         councilJudgementFee = _fee;
         councilJudgementFeeRate = _rate;
+    }
+    
+    function updateCompensationRate(uint256 _rate) external nonReentrant onlyOperator {
+        compensationRate = _rate;
     }
     
     function updateBonusTokenManager(address _BonusTokenManagerAddress) external nonReentrant onlyOperator {
@@ -421,6 +421,11 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         vault = VaultInterface(_vaultAddress);
     }
     
+    function updateDispute(address _disputeAddress) external nonReentrant onlyOperator {
+        disputeAddress = _disputeAddress;
+        dispute = DisputeInterface(_disputeAddress);
+    }
+
     function getJudgementFee(uint256 _amount) internal view returns(uint256) {
         return _amount * councilJudgementFeeRate / 10000 + councilJudgementFee;        
     }
