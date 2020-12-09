@@ -41,15 +41,16 @@ contract Vault {
     mapping(bytes32 => Commitment) private commitments; 
     address public operator;
     address public shakerContractAddress;
+    address public disputeManagerAddress;
 
     event Deposit(address sender, bytes32 hashkey, uint256 amount, uint256 timestamp);
     event Withdrawal(string commitment, uint256 fee, uint256 amount, uint256 timestamp);
 
-    function sendDepositEvent(address _sender, bytes32 _hashkey, uint256 _amount, uint256 _timestamp) external onlyShaker {
+    function sendDepositEvent(address _sender, bytes32 _hashkey, uint256 _amount, uint256 _timestamp) external onlyShakerAndDisputManager {
       emit Deposit(_sender, _hashkey, _amount, _timestamp);
     }
 
-    function sendWithdrawEvent(string calldata _commitment, uint256 _fee, uint256 _amount, uint256 _timestamp) external onlyShaker {
+    function sendWithdrawEvent(string calldata _commitment, uint256 _fee, uint256 _amount, uint256 _timestamp) external onlyShakerAndDisputManager {
       emit Withdrawal(_commitment, _fee, _amount, _timestamp);
     }
 
@@ -58,8 +59,8 @@ contract Vault {
         _;
     }
 
-    modifier onlyShaker {
-        require(msg.sender == shakerContractAddress, "Only bitcheck contract can call this function.");
+    modifier onlyShakerAndDisputManager {
+        require(msg.sender == shakerContractAddress || msg.sender == disputeManagerAddress, "Only bitcheck contract or dispute manager can call this function.");
         _;
     }
 
@@ -69,92 +70,92 @@ contract Vault {
         erc20 = ERC20Interface(erc20Address);
     }
 
-    function setStatus(bytes32 _hashkey, uint256 _status) external onlyShaker {
+    function setStatus(bytes32 _hashkey, uint256 _status) external onlyShakerAndDisputManager {
         commitments[_hashkey].status = _status;
     }
     
-    function setAmount(bytes32 _hashkey, uint256 _amount) external onlyShaker {
+    function setAmount(bytes32 _hashkey, uint256 _amount) external onlyShakerAndDisputManager {
         commitments[_hashkey].amount = _amount;
     }
     
-    function setSender(bytes32 _hashkey, address payable _sender) external onlyShaker {
+    function setSender(bytes32 _hashkey, address payable _sender) external onlyShakerAndDisputManager {
         commitments[_hashkey].sender = _sender;
     }
     
-    function setEffectiveTime(bytes32 _hashkey, uint256 _effectiveTime) external onlyShaker {
+    function setEffectiveTime(bytes32 _hashkey, uint256 _effectiveTime) external onlyShakerAndDisputManager {
         commitments[_hashkey].effectiveTime = _effectiveTime;
     }
     
-    function setTimestamp(bytes32 _hashkey, uint256 _timestamp) external onlyShaker {
+    function setTimestamp(bytes32 _hashkey, uint256 _timestamp) external onlyShakerAndDisputManager {
         commitments[_hashkey].timestamp = _timestamp;
     }
     
-    function setCanEndorse(bytes32 _hashkey, uint256 _canEndorse) external onlyShaker {
+    function setCanEndorse(bytes32 _hashkey, uint256 _canEndorse) external onlyShakerAndDisputManager {
         commitments[_hashkey].canEndorse = _canEndorse;
     }
     
-    function setLockable(bytes32 _hashkey, uint256 _lockable) external onlyShaker {
+    function setLockable(bytes32 _hashkey, uint256 _lockable) external onlyShakerAndDisputManager {
         commitments[_hashkey].lockable = _lockable;
     }
 
-    function setParams1(bytes32 _hashkey, uint256 _params1) external onlyShaker {
+    function setParams1(bytes32 _hashkey, uint256 _params1) external onlyShakerAndDisputManager {
         commitments[_hashkey].params1 = _params1;
     }
 
-    function setParams2(bytes32 _hashkey, uint256 _params2) external onlyShaker {
+    function setParams2(bytes32 _hashkey, uint256 _params2) external onlyShakerAndDisputManager {
         commitments[_hashkey].params2 = _params2;
     }
 
-    function setParams3(bytes32 _hashkey, uint256 _params3) external onlyShaker {
+    function setParams3(bytes32 _hashkey, uint256 _params3) external onlyShakerAndDisputManager {
         commitments[_hashkey].params3 = _params3;
     }
 
-    function setParams4(bytes32 _hashkey, address _params4) external onlyShaker {
+    function setParams4(bytes32 _hashkey, address _params4) external onlyShakerAndDisputManager {
         commitments[_hashkey].params4 = _params4;
     }
     
     
-    function getStatus(bytes32 _hashkey) external view onlyShaker returns(uint256) {
+    function getStatus(bytes32 _hashkey) external view onlyShakerAndDisputManager returns(uint256) {
         return commitments[_hashkey].status;
     }
     
-    function getAmount(bytes32 _hashkey) external view onlyShaker returns(uint256) {
+    function getAmount(bytes32 _hashkey) external view onlyShakerAndDisputManager returns(uint256) {
         return commitments[_hashkey].amount;
     }
     
-    function getSender(bytes32 _hashkey) external view onlyShaker returns(address payable) {
+    function getSender(bytes32 _hashkey) external view onlyShakerAndDisputManager returns(address payable) {
         return commitments[_hashkey].sender;
     }
     
-    function getEffectiveTime(bytes32 _hashkey) external view onlyShaker returns(uint256) {
+    function getEffectiveTime(bytes32 _hashkey) external view onlyShakerAndDisputManager returns(uint256) {
         return commitments[_hashkey].effectiveTime;
     }
     
-    function getTimestamp(bytes32 _hashkey) external view onlyShaker returns(uint256) {
+    function getTimestamp(bytes32 _hashkey) external view onlyShakerAndDisputManager returns(uint256) {
         return commitments[_hashkey].timestamp;
     }
     
-    function getCanEndorse(bytes32 _hashkey) external view onlyShaker returns(uint256) {
+    function getCanEndorse(bytes32 _hashkey) external view onlyShakerAndDisputManager returns(uint256) {
         return commitments[_hashkey].canEndorse;
     }
     
-    function getLockable(bytes32 _hashkey) external view onlyShaker returns(uint256) {
+    function getLockable(bytes32 _hashkey) external view onlyShakerAndDisputManager returns(uint256) {
         return commitments[_hashkey].lockable;
     }    
 
-    function getParams1(bytes32 _hashkey) external view onlyShaker returns(uint256) {
+    function getParams1(bytes32 _hashkey) external view onlyShakerAndDisputManager returns(uint256) {
         return commitments[_hashkey].params1;
     }
 
-    function getParams2(bytes32 _hashkey) external view onlyShaker returns(uint256) {
+    function getParams2(bytes32 _hashkey) external view onlyShakerAndDisputManager returns(uint256) {
         return commitments[_hashkey].params2;
     }
 
-    function getParams3(bytes32 _hashkey) external view onlyShaker returns(uint256) {
+    function getParams3(bytes32 _hashkey) external view onlyShakerAndDisputManager returns(uint256) {
         return commitments[_hashkey].params3;
     }
 
-    function getParams4(bytes32 _hashkey) external view onlyShaker returns(address) {
+    function getParams4(bytes32 _hashkey) external view onlyShakerAndDisputManager returns(address) {
         return commitments[_hashkey].params4;
     }
     
@@ -164,8 +165,15 @@ contract Vault {
 
     function updateShakerAddress(address _shaker, uint256 _allowance) external onlyOperator returns(bool) {
         shakerContractAddress = _shaker;
-        // Approve shaker contract, you have do twice to re-approve USDT: 1st approve 0, then approve the new amount.
+        // Approve shaker contract
         safeApprove(erc20Address, _shaker, _allowance);
+        return true;
+    }
+
+    function updateDisputeManager(address _disputeManagerAddress, uint256 _allowance) external onlyOperator returns(bool) {
+        disputeManagerAddress = _disputeManagerAddress;
+        // Approve shaker contract
+        safeApprove(erc20Address, _disputeManagerAddress, _allowance);
         return true;
     }
 
@@ -173,15 +181,15 @@ contract Vault {
       return erc20.allowance(address(this), shakerContractAddress);
     }
 
-    function addTotalAmount(uint256 _amount) external onlyShaker {
+    function addTotalAmount(uint256 _amount) external onlyShakerAndDisputManager {
         totalAmount = totalAmount.add(_amount);
     }
 
-    function addTotalBalance(uint256 _amount) external onlyShaker {
+    function addTotalBalance(uint256 _amount) external onlyShakerAndDisputManager {
         totalBalance = totalBalance.add(_amount);
     }
 
-    function subTotalBalance(uint256 _amount) external onlyShaker {
+    function subTotalBalance(uint256 _amount) external onlyShakerAndDisputManager {
         totalBalance = totalBalance.sub(_amount);
     }
 

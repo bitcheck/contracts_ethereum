@@ -3,17 +3,14 @@ pragma solidity >=0.4.23 <0.6.0;
 interface DisputeInterface {
     function getLockReasonStatus(bytes32 _hashkey) external view returns(uint256);
     
-    function setLockReason(
+    function initLockReason(
         bytes32 _key,
         string calldata _description,
-        uint256 _status,
         uint256 _replyDeadline,
         uint256 _refund,
         address payable _locker,
         address payable _recipient,
-        uint256 _fee,
-        uint256 _recipientAgree,
-        uint256 _toCouncil
+        uint256 _fee
     ) external returns(bool);
     
     function getLockReason(bytes32 _hashkey) external view returns(

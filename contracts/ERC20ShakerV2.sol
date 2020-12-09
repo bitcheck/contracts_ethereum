@@ -15,16 +15,22 @@ pragma solidity >=0.4.23 <0.6.0;
 
 import "./ShakerV2.sol";
 
+/**
+ * 0x88442bC7a25b6EAE0d65c233C452e5D2EC300dDc
+ * 0x87d04714eCBb54b32003092524be9772280957d3
+ * 0xCC620468d43f281811bE76dCA86F80cfbDfFf947
+ * 0x95ecF49B323eAA8514D2ceE3aD61f82E37595A24
+ */
 contract ERC20ShakerV2 is ShakerV2 {
   address public token;
 
   constructor(
     address _commonWithdrawAddress,
-    address _token,
+    address _tokenAddress,
     address _vaultAddress,
-    address _disputeAddress
-  ) ShakerV2(msg.sender, _commonWithdrawAddress, _vaultAddress, _disputeAddress, _token) public {
-    token = _token;
+    address _disputeManagerAddress
+  ) ShakerV2(msg.sender, _commonWithdrawAddress, _vaultAddress, _tokenAddress, _disputeManagerAddress) public {
+    token = _tokenAddress;
   }
 
   function _processDeposit(uint256 _amount, address _to) internal {

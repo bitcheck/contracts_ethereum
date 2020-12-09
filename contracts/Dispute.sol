@@ -19,11 +19,11 @@ contract Dispute is ReentrancyGuard {
         uint256 toCouncil;
     }
     mapping(bytes32 => LockReason) private lockReason;
-    address public shakerContractAddress;
+    address public disputeManagerAddress;
     address public operator;
     
-    modifier onlyShaker {
-        require(msg.sender == shakerContractAddress, "Only shaker contract can call this function.");
+    modifier onlyDisputeManager {
+        require(msg.sender == disputeManagerAddress, "Only dispute manager contract can call this function.");
         _;
     }
 
@@ -56,91 +56,88 @@ contract Dispute is ReentrancyGuard {
     function getStatus(bytes32 _hashkey) external view returns(uint256) {
         return lockReason[_hashkey].status;
     }
-    function setStatus(bytes32 _hashkey, uint256 _status) external onlyShaker {
+    function setStatus(bytes32 _hashkey, uint256 _status) external onlyDisputeManager {
         lockReason[_hashkey].status = _status;
     }
     
     function getRefund(bytes32 _hashkey) external view returns(uint256) {
         return lockReason[_hashkey].refund;
     }
-    function setRefund(bytes32 _hashkey, uint256 _refund) external onlyShaker {
+    function setRefund(bytes32 _hashkey, uint256 _refund) external onlyDisputeManager {
         lockReason[_hashkey].refund = _refund;
     }
     
     function getToCouncil(bytes32 _hashkey) external view returns(uint256) {
         return lockReason[_hashkey].toCouncil;
     }
-    function setToCouncil(bytes32 _hashkey, uint256 _toCouncil) external onlyShaker {
+    function setToCouncil(bytes32 _hashkey, uint256 _toCouncil) external onlyDisputeManager {
         lockReason[_hashkey].toCouncil = _toCouncil;
     }
     
     function getLocker(bytes32 _hashkey) external view returns(address payable) {
         return lockReason[_hashkey].locker;
     }
-    function setLocker(bytes32 _hashkey, address payable _locker) external onlyShaker {
+    function setLocker(bytes32 _hashkey, address payable _locker) external onlyDisputeManager {
         lockReason[_hashkey].locker = _locker;
     }
     function getDatetime(bytes32 _hashkey) external view returns(uint256) {
         return lockReason[_hashkey].datetime;
     }
-    function setDatetime(bytes32 _hashkey, uint256 _datetime) external onlyShaker {
+    function setDatetime(bytes32 _hashkey, uint256 _datetime) external onlyDisputeManager {
         lockReason[_hashkey].datetime = _datetime;
     }
 
     function getRecipientAgree(bytes32 _hashkey) external view returns(uint256) {
         return lockReason[_hashkey].recipientAgree;
     }
-    function setRecipientAgree(bytes32 _hashkey, uint256 _recipientAgree) external onlyShaker {
+    function setRecipientAgree(bytes32 _hashkey, uint256 _recipientAgree) external onlyDisputeManager {
         lockReason[_hashkey].recipientAgree = _recipientAgree;
     }
 
     function getReplyDeadline(bytes32 _hashkey) external view returns(uint256) {
         return lockReason[_hashkey].replyDeadline;
     }
-    function setReplyDeadline(bytes32 _hashkey, uint256 _replyDeadline) external onlyShaker {
+    function setReplyDeadline(bytes32 _hashkey, uint256 _replyDeadline) external onlyDisputeManager {
         lockReason[_hashkey].replyDeadline = _replyDeadline;
     }
     
     function getFee(bytes32 _hashkey) external view returns(uint256) {
         return lockReason[_hashkey].fee;
     }
-    function setFee(bytes32 _hashkey, uint256 _fee) external onlyShaker {
+    function setFee(bytes32 _hashkey, uint256 _fee) external onlyDisputeManager {
         lockReason[_hashkey].fee = _fee;
     }
 
     function getRecipient(bytes32 _hashkey) external view returns(address payable) {
         return lockReason[_hashkey].recipient;
     }
-    function setRecipient(bytes32 _hashkey, address payable _recipient) external onlyShaker {
+    function setRecipient(bytes32 _hashkey, address payable _recipient) external onlyDisputeManager {
         lockReason[_hashkey].recipient = _recipient;
     }
     
-    function setLockReason(
+    function initLockReason(
         bytes32 _key,
         string calldata _description,
-        uint256 _status,
         uint256 _replyDeadline,
         uint256 _refund,
         address payable _locker,
         address payable _recipient,
-        uint256 _fee,
-        uint256 _recipientAgree,
-        uint256 _toCouncil
-    ) external onlyShaker returns(bool) {
+        uint256 _fee
+    ) external onlyDisputeManager returns(bool) {
         lockReason[_key].description = _description;
-        lockReason[_key].status = _status;
+        lockReason[_key].status = 1;
         lockReason[_key].datetime = block.timestamp;
         lockReason[_key].replyDeadline = _replyDeadline;
         lockReason[_key].refund = _refund;
         lockReason[_key].locker = _locker;
         lockReason[_key].recipient = _recipient;
         lockReason[_key].fee = _fee;
-        lockReason[_key].recipientAgree = _recipientAgree;
-        lockReason[_key].toCouncil = _toCouncil;
+        lockReason[_key].recipientAgree = 0;
+        lockReason[_key].toCouncil = 0;
         return true;
     }
     
-    function sendFeeTo(address token, address to, uint256 amount) external onlyShaker {
+    function sendFeeTo(address token, address to, uint256 amount) external onlyDisputeManager {
         TransferHelper.safeTransfer(token, to, amount);
     }
     
@@ -148,8 +145,8 @@ contract Dispute is ReentrancyGuard {
         operator = _operator;
     }
     
-    function updateShakerAddress(address _shaker) external onlyOperator {
-        shakerContractAddress = _shaker;
+    function updateDisputeManager(address _disputeManager) external onlyOperator {
+        disputeManagerAddress = _disputeManager;
     }
 }
 
