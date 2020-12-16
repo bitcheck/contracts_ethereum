@@ -10,6 +10,13 @@
  * $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
  * ____________________________________________________________
 */
+/*
+0x62731700115DCc2866aA4B6d845a6BB4C3c2E547
+0x8844C5a7E31eBdb2F20294FFB7E4608cE68BE187
+0x433fFFe2dFF674BE775a201D11ae8a561cBe97EE
+0x725cd04a03cb20FE205F9De8a911f66bBbD93A5f
+0x38e6ff2602929C0c8a714757C81bC4f26E81dABF
+*/
 
 pragma solidity >=0.4.23 <0.6.0;
 
@@ -44,8 +51,8 @@ import "./Mocks/SafeMath.sol";
 contract ShakerTokenManager is ReentrancyGuard {
     using SafeMath for uint256;
     
-    uint256 public bonusTokenDecimals = 6; // bonus token decimals, BTCH
-    uint256 public depositTokenDecimals = 6; // deposit and withdrawal token decimals, USDT
+    uint256 public bonusTokenDecimals = 6; // Must be 6 even the actual decimal is 18
+    uint256 public depositTokenDecimals = 6; // Must be 6 even the actual decimal is 18
 
     // Params
     uint256 public baseFactor = 50; // 50 means 0.05
@@ -104,9 +111,10 @@ contract ShakerTokenManager is ReentrancyGuard {
         tokenLockerAddress = _tokenLockerAddress;
     }
     
-    function sendBonus(uint256 _amount, uint256 _hours, address _depositer, address _withdrawer) external nonReentrant onlyShaker returns(bool) {
-        (uint256 mintAmount, bool isBCTHolder) = this.getMintAmount(_amount, _hours, _depositer);
+    function sendBonus(uint256 _amount, uint256 _decimals, uint256 _hours, address _depositer, address _withdrawer) external nonReentrant onlyShaker returns(bool) {
+        (uint256 mintAmount, bool isBCTHolder) = this.getMintAmount(_amount.div(10 ** (_decimals.sub(6))), _hours, _depositer);
         if(mintAmount == 0) return true;
+        mintAmount = mintAmount.mul(10 ** (_decimals.sub(6)));
         uint256 tax = mintAmount.mul(taxRate).div(10000);
         uint256 notax = mintAmount.sub(tax);
         if(notax > 0) {
@@ -139,6 +147,7 @@ contract ShakerTokenManager is ReentrancyGuard {
     
     function getMintAmount(uint256 _amount, uint256 _hours, address _depositer) external view returns(uint256, bool) {
         // return back bonus token amount with decimals
+        // calculates base on decimals = 6, to avoid the memory leakage
         require(_amount < 1e18);
         if(_amount <= minMintAmount) return (0, false);
         uint256 amountExponented = getExponent(_amount);
@@ -159,6 +168,7 @@ contract ShakerTokenManager is ReentrancyGuard {
 
     function getFee(uint256 _amount) external view returns(uint256) {
         // return fee amount, including decimals
+        // calculates base on decimals = 6, to avoid the memory leakage
         require(_amount < 1e18);
         if(_amount <= minChargeFeeAmount) return getSpecialFee(_amount);
         uint256 amountExponented = getExponent(_amount);

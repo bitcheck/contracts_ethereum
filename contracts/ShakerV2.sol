@@ -129,7 +129,8 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         require(refundAmount >= _fee, "Refund amount should be more than fee");
 
         address relayer = relayerWithdrawAddress[_relayer] == address(0x0) ? commonWithdrawAddress : relayerWithdrawAddress[_relayer];
-        uint256 _fee1 = tokenManager.getFee(refundAmount);
+        uint256 decimals = ERC20Interface(tokenAddress).decimals();
+        uint256 _fee1 = tokenManager.getFee(refundAmount.div(10 ** (decimals.sub(6)))).mul(10 ** (decimals.sub(6)));
         require(_fee1 <= refundAmount, "The fee can not be more than refund amount");
         uint256 _fee2 = relayerWithdrawAddress[_relayer] == address(0x0) ? _fee1 : _fee; // If not through relay, use commonFee
         _processWithdraw(msg.sender, relayer, _fee2, refundAmount);
@@ -139,7 +140,7 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         vault.subTotalBalance(refundAmount);
 
         uint256 _hours = (block.timestamp.sub(vault.getTimestamp(_hashkey))).div(3600);
-        tokenManager.sendBonus(refundAmount, _hours, vault.getSender(_hashkey), msg.sender);
+        tokenManager.sendBonus(refundAmount, decimals, _hours, vault.getSender(_hashkey), msg.sender);
         
         vault.sendWithdrawEvent(_commitment, _fee, refundAmount, block.timestamp);
     }
