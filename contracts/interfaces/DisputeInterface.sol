@@ -13,19 +13,6 @@ interface DisputeInterface {
         uint256 _fee
     ) external returns(bool);
     
-    function getLockReason(bytes32 _hashkey) external view returns(
-        string memory description,
-        uint256 status,
-        uint256 datetime,
-        uint256 replyDeadline,
-        uint256 refund,
-        address payable locker,
-        address payable recipient,
-        uint256 fee,
-        uint256 recipientAgree,
-        uint256 toCouncil
-    );
-
     function getStatus(bytes32 _hashkey) external view returns(uint256);
     function setStatus(bytes32 _hashkey, uint256 _status) external;
     function getRefund(bytes32 _hashkey) external view returns(uint256);
