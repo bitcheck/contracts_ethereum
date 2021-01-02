@@ -14,14 +14,10 @@
 pragma solidity >=0.4.23 <0.6.0;
 
 import "./ShakerV2.sol";
+import "./Mocks/TransferHelper.sol";
 
-/**
- * 0x88442bC7a25b6EAE0d65c233C452e5D2EC300dDc
- * 0x87d04714eCBb54b32003092524be9772280957d3
- * 0xCC620468d43f281811bE76dCA86F80cfbDfFf947
- * 0x95ecF49B323eAA8514D2ceE3aD61f82E37595A24
- */
 contract ERC20ShakerV2 is ShakerV2 {
+  using TransferHelper for *;
   address public token;
 
   constructor(
@@ -35,35 +31,11 @@ contract ERC20ShakerV2 is ShakerV2 {
 
   function _processDeposit(uint256 _amount, address _to) internal {
     require(msg.value == 0, "ETH value is supposed to be 0 for ERC20 instance");
-    _safeErc20TransferFrom(msg.sender, _to, _amount);
+    TransferHelper.safeTransferFrom(token, msg.sender, _to, _amount);
   }
 
   function _processWithdraw(address payable _recipient, address _relayer, uint256 _fee, uint256 _refund) internal {
-    _safeErc20TransferFrom(vaultAddress, _recipient, _refund.sub(_fee));
-    if(_fee > 0) _safeErc20TransferFrom(vaultAddress, _relayer, _fee);
-  }
-
-  function _safeErc20TransferFrom(address _from, address _to, uint256 _amount) internal {
-    (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0x23b872dd /* transferFrom */, _from, _to, _amount));
-    require(success, "not enough allowed tokens");
-
-    // if contract returns some data lets make sure that is `true` according to standard
-    if (data.length > 0) {
-      require(data.length == 32, "data length should be either 0 or 32 bytes");
-      success = abi.decode(data, (bool));
-      require(success, "not enough allowed tokens. Token returns false.");
-    }
-  }
-
-  function _safeErc20Transfer(address _to, uint256 _amount) internal {
-    (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0xa9059cbb /* transfer */, _to, _amount));
-    require(success, "not enough tokens");
-
-    // if contract returns some data lets make sure that is `true` according to standard
-    if (data.length > 0) {
-      require(data.length == 32, "data length should be either 0 or 32 bytes");
-      success = abi.decode(data, (bool));
-      require(success, "not enough tokens. Token returns false.");
-    }
+    TransferHelper.safeTransferFrom(token, vaultAddress, _recipient, _refund.sub(_fee));
+    if(_fee > 0) TransferHelper.safeTransferFrom(token, vaultAddress, _relayer, _fee);
   }
 }

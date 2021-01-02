@@ -54,11 +54,6 @@ contract DisputeManager is ReentrancyGuard, StringUtils {
         _;
     }
 
-    /**
-     * 0x87d04714eCBb54b32003092524be9772280957d3
-     * 0xCC620468d43f281811bE76dCA86F80cfbDfFf947
-     * 0x28ABF022Ddf59E4e9dC030fDb2866A1AF6884185
-     */
     constructor(
         address _shakerAddress,
         address _tokenAddress,
@@ -163,11 +158,12 @@ contract DisputeManager is ReentrancyGuard, StringUtils {
         if(isSender == 1 && block.timestamp >= dispute.getDatetime(_hashkey) && _status != 3) {
             // Sender accept to keep cheque available
             dispute.setStatus(_hashkey, _status == 2 ? 4 : 1);
-            dispute.setToCouncil(_hashkey, _status == 1 ? 1 : 0);
             if(_status == 2) {
                 // cancel refund and return back arbitration fee
-                dispute.sendFeeTo(tokenAddress, dispute.getLocker(_hashkey), dispute.getFee(_hashkey)); 
+                dispute.sendFeeTo(tokenAddress, dispute.getLocker(_hashkey), dispute.getFee(_hashkey));
+                if(dispute.getToCouncil(_hashkey) == 1) dispute.sendFeeTo(tokenAddress, dispute.getRecipient(_hashkey), dispute.getFee(_hashkey));
             }
+            dispute.setToCouncil(_hashkey, _status == 1 ? 1 : 0);
         } else if(isSender == 1 && block.timestamp >= dispute.getReplyDeadline(_hashkey) && _status == 3) {
             // Sender can refund after reply deadline
             dispute.setStatus(_hashkey, 5);
@@ -233,5 +229,11 @@ contract DisputeManager is ReentrancyGuard, StringUtils {
     function updateCouncilJudgementFee(uint256 _fee, uint256 _rate) external nonReentrant onlyOperator {
         councilJudgementFee = _fee;
         councilJudgementFeeRate = _rate;
+    }
+    function updateShaker(address _shakerAddress) external nonReentrant onlyOperator {
+        shakerAddress = _shakerAddress;
+    }
+    function updateToken(address _tokenAddress) external nonReentrant onlyOperator {
+        tokenAddress = _tokenAddress;
     }
 }
