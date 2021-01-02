@@ -122,11 +122,11 @@ contract RedPacket is ReentrancyGuard {
         uint256 cliff = vault.getCliff(_hashkey);
         string memory memo = vault.getMemo(_hashkey);
         if(balance == 0) return (0,0,times,cliff,memo);
-        else return(balance, cal(balance, times, cliff), times, cliff, memo);
+        else return(balance, cal(balance, cliff), times, cliff, memo);
     }
 
-    function cal(uint256 balance, uint256 times, uint256 cliff) internal pure returns(uint256) {
-        return ((uint256(100).sub(cliff))**times).mul(cliff).mul(balance).div(100**(times+1));
+    function cal(uint256 balance, uint256 cliff) internal pure returns(uint256) {
+        return balance.mul(cliff).div(100);
     }
     
     function updateTokenAddress(address _tokenAddress) external nonReentrant onlyOperator {
