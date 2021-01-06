@@ -28,16 +28,23 @@ contract RedPacket is ReentrancyGuard {
     address public operator;
     address public tokenAddress;        // USDT token
     address public redpacketVaultAddress;
+    address public redpacketVaultV2Address;
     address public tokenManager;
-    uint256 public hoursInterval = 25;
+    uint256 public feeRate = 50;        // 50 means 0.5%
+    address public commonWithdrawAddress; 
+    uint256 public maxAmount = 50;      // max amount of each redpacket
 
     constructor (
         address _redpacketVaultAddress,
-        address _tokenAddress
+        address _redpacketVaultV2Address,
+        address _tokenAddress,
+        address _commonWithdrawAddress
     ) public {
         operator = msg.sender;
         redpacketVaultAddress = _redpacketVaultAddress;
+        redpacketVaultV2Address = _redpacketVaultV2Address;
         tokenAddress = _tokenAddress;
+        commonWithdrawAddress = _commonWithdrawAddress;
     }
 
     modifier onlyOperator {
@@ -45,19 +52,25 @@ contract RedPacket is ReentrancyGuard {
         _;
     }
     
+    // Version 1: all deposit and withdraw data is published by event, everyone can search, and high rish. 
+    // Version 2: data is save in a vault, only sender can search his redpackets, low risk.
     function deposit (
         bytes32 _hashKey,
         uint256 _amount,
         uint256 _cliff,
-        string calldata _memo
+        string calldata _memo,
+        uint256 _version
     ) external nonReentrant {
-        RedpacketVaultInterface vault = RedpacketVaultInterface(redpacketVaultAddress);
+        RedpacketVaultInterface vault = _version == 1 ? RedpacketVaultInterface(redpacketVaultAddress) : RedpacketVaultInterface(redpacketVaultV2Address);
+        uint256 decimals = ERC20Interface(tokenAddress).decimals();
+        require(_amount <= maxAmount * 10**decimals, 'exceed max amount of each redpacket');
         require(vault.getStatus(_hashKey) == 0, "The commitment has been submitted or used out.");
         require(_amount > 0);
         
         uint256 allowance = ERC20Interface(tokenAddress).allowance(msg.sender, address(this));
         require(allowance >= _amount, "allowance of redpacket manager to sender is not enough");
-        TransferHelper.safeTransferFrom(tokenAddress, msg.sender, redpacketVaultAddress, _amount);
+        address vaultAddress = _version == 1 ? redpacketVaultAddress : redpacketVaultV2Address;
+        TransferHelper.safeTransferFrom(tokenAddress, msg.sender, vaultAddress, _amount);
         
         vault.setStatus(_hashKey, 1);
         vault.setAmount(_hashKey, _amount);
@@ -70,61 +83,83 @@ contract RedPacket is ReentrancyGuard {
         vault.addTotalAmount(_amount);
         vault.addTotalBalance(_amount);
         
-
-        vault.sendRedpacketDepositEvent(msg.sender, _hashKey, _amount, block.timestamp);
+        if(_version == 1) vault.sendRedpacketDepositEvent(msg.sender, _hashKey, _amount, block.timestamp);
     }
     
-    function withdraw (bytes32 _hashkey) external nonReentrant {
-        RedpacketVaultInterface vault = RedpacketVaultInterface(redpacketVaultAddress);
+    function withdraw (bytes32 _hashkey, uint256 _version) external nonReentrant {
+        RedpacketVaultInterface vault = _version == 1 ? RedpacketVaultInterface(redpacketVaultAddress) : RedpacketVaultInterface(redpacketVaultV2Address);
+        address vaultAddress = _version == 1 ? redpacketVaultAddress : redpacketVaultV2Address;
+        
         require(vault.getAmount(_hashkey) > 0, 'The commitment of this recipient is not exist or used out');
         require(!vault.isTaken(_hashkey, msg.sender), 'this address has taken red packet');
-        (,uint256 amount,,,) = this.getAmount(_hashkey);
+        (,uint256 amount,,,) = this.getAmount(_hashkey, _version);
         require(amount > 0, "redpacket amount is zero");
         uint256 refundAmount = amount < vault.getAmount(_hashkey) ? amount : vault.getAmount(_hashkey); //Take all if _refund == 0
         require(refundAmount > 0, "Refund amount can not be zero");
     
-        uint256 allowance = ERC20Interface(tokenAddress).allowance(redpacketVaultAddress, address(this));
+        uint256 allowance = ERC20Interface(tokenAddress).allowance(vaultAddress, address(this));
         require(allowance >= refundAmount, "allowance of redpacket manager to vault is not enough");
-        TransferHelper.safeTransferFrom(tokenAddress, redpacketVaultAddress, msg.sender, refundAmount);
     
         vault.setAmount(_hashkey, vault.getAmount(_hashkey).sub(refundAmount));
         vault.setStatus(_hashkey, vault.getAmount(_hashkey) <= 0 ? 0 : 1);
         vault.setWithdrawTimes(_hashkey, vault.getWithdrawTimes(_hashkey).add(1));
         vault.subTotalBalance(refundAmount);
-    
         vault.addTakenAddress(_hashkey, msg.sender);
 
-        uint256 decimals = ERC20Interface(tokenAddress).decimals();
-        ShakerTokenManagerInterface(tokenManager).sendRedpacketBonus(refundAmount, decimals, hoursInterval, vault.getSender(_hashkey));
+        uint256 _fee = refundAmount.mul(feeRate).div(10000);
+        require(_fee <= refundAmount, "The fee can not be more than refund amount");
 
-        vault.sendRedpacketWithdrawEvent(vault.getSender(_hashkey), msg.sender, _hashkey, refundAmount, block.timestamp);
+        TransferHelper.safeTransferFrom(tokenAddress, vaultAddress, commonWithdrawAddress, _fee);
+        TransferHelper.safeTransferFrom(tokenAddress, vaultAddress, msg.sender, refundAmount.sub(_fee));
+
+        uint256 _hours = (block.timestamp.sub(vault.getTimestamp(_hashkey))).div(3600);
+        address _sender = vault.getSender(_hashkey);
+        sendBonus(refundAmount, _hours, _sender);
+
+        if(_version == 1) vault.sendRedpacketWithdrawEvent(vault.getSender(_hashkey), msg.sender, _hashkey, refundAmount.sub(_fee), block.timestamp);
     }
     
-    function revoke (bytes32 _hashkey) external nonReentrant {
-        RedpacketVaultInterface vault = RedpacketVaultInterface(redpacketVaultAddress);
+    function sendBonus(uint256 _refundAmount, uint256 _hours, address _sender) internal {
+        uint256 decimals = ERC20Interface(tokenAddress).decimals();
+        ShakerTokenManagerInterface(tokenManager).sendRedpacketBonus(_refundAmount, decimals, _hours, _sender);
+        
+    }
+
+    function revoke (bytes32 _hashkey, uint256 _version) external nonReentrant {
+        RedpacketVaultInterface vault = _version == 1 ? RedpacketVaultInterface(redpacketVaultAddress) : RedpacketVaultInterface(redpacketVaultV2Address);
+        address vaultAddress = _version == 1 ? redpacketVaultAddress : redpacketVaultV2Address;
+
         uint256 amount = vault.getAmount(_hashkey);
         require(amount > 0, 'The commitment of this recipient is not exist or used out');
         require(msg.sender == vault.getSender(_hashkey), 'The revoke must be operated by sender');
 
-        uint256 allowance = ERC20Interface(tokenAddress).allowance(redpacketVaultAddress, address(this));
+        uint256 allowance = ERC20Interface(tokenAddress).allowance(vaultAddress, address(this));
         require(allowance >= amount, "allowance of redpacket manager to vault is not enough");
-        TransferHelper.safeTransferFrom(tokenAddress, redpacketVaultAddress, msg.sender, amount);
+        TransferHelper.safeTransferFrom(tokenAddress, vaultAddress, msg.sender, amount);
     
         vault.setAmount(_hashkey, 0);
         vault.setStatus(_hashkey, 0);
         vault.subTotalBalance(amount);
     }
     
-    function getAmount(bytes32 _hashkey) external view returns(uint256, uint256, uint256, uint256, string memory) {
-        RedpacketVaultInterface vault = RedpacketVaultInterface(redpacketVaultAddress);
+    function getAmount(bytes32 _hashkey, uint256 _version) external view returns(uint256, uint256, uint256, uint256, string memory) {
+        RedpacketVaultInterface vault = _version == 1 ? RedpacketVaultInterface(redpacketVaultAddress) : RedpacketVaultInterface(redpacketVaultV2Address);
         uint256 balance = vault.getAmount(_hashkey);
         uint256 times = vault.getWithdrawTimes(_hashkey);
         uint256 cliff = vault.getCliff(_hashkey);
         string memory memo = vault.getMemo(_hashkey);
-        if(balance == 0) return (0,0,times,cliff,memo);
+        if(balance == 0) return (0, 0, times, cliff, memo);
         else return(balance, cal(balance, cliff), times, cliff, memo);
     }
 
+    function getMoreDetails(bytes32 _hashkey, uint256 _version) external view returns(uint256, uint256, address) {
+        RedpacketVaultInterface vault = _version == 1 ? RedpacketVaultInterface(redpacketVaultAddress) : RedpacketVaultInterface(redpacketVaultV2Address);
+        uint256 amount = vault.getAmount(_hashkey);
+        uint256 timestamp = vault.getTimestamp(_hashkey);
+        address sender = vault.getSender(_hashkey);
+        return(amount, timestamp, sender);
+    }
+    
     function cal(uint256 balance, uint256 cliff) internal pure returns(uint256) {
         return balance.mul(cliff).div(100);
     }
@@ -137,11 +172,23 @@ contract RedPacket is ReentrancyGuard {
         redpacketVaultAddress = _vaultAddress;
     }
     
+    function updateRedpacketVaultV2Address(address _vaultAddress) external nonReentrant onlyOperator {
+        redpacketVaultV2Address = _vaultAddress;
+    }
+
     function updateTokenManager(address _tokenManager) external nonReentrant onlyOperator {
         tokenManager = _tokenManager;
     }
     
-    function updateHoursInterval(uint256 _interval) external nonReentrant onlyOperator {
-        hoursInterval = _interval;
+    function updateFeeRate(uint256 _rate) external nonReentrant onlyOperator {
+        feeRate = _rate;
+    }
+    
+    function updateCommonWithdrawAddress(address _addr) external nonReentrant onlyOperator {
+        commonWithdrawAddress = _addr;
+    }
+    
+    function updateMaxAmount(uint256 _amount) external nonReentrant onlyOperator {
+        maxAmount = _amount;
     }
 }
