@@ -54,10 +54,10 @@ module.exports = {
     rinkeby: {
       provider: () => new HDWalletProvider(process.env.PRIVATE_KEY_RINKEBY, 'https://rinkeby.infura.io/v3/3446259cb0e74d68b614f9a10328a368'),
       network_id: 4,
-      gas: 8000000,
-      gasPrice: utils.toWei('1', 'gwei'),
+      gas: 10000000,
+      gasPrice: utils.toWei('40', 'gwei'),
       // confirmations: 0,
-      // timeoutBlocks: 200,
+      // timeoutBlocks: 500,
       skipDryRun: true
     },
     mainnet: {

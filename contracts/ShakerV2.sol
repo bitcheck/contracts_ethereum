@@ -42,6 +42,10 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
     // If the msg.sender(relayer) has not registered Withdrawal address, the fee will send to this address
     address public commonWithdrawAddress; 
     
+    // exchange rate for other crypto currency with usdt, 100000000 means 1 by 1, if btc is $40,000, this param will be 40,000 * 1e8
+    // if a token is 0.00123 usdt, this param will be 0.00123 * 1e8 = 123,000
+    uint256 public exchangeRate = 1e8;
+    
     modifier onlyOperator {
         require(msg.sender == operator, "Only operator can call this function.");
         _;
@@ -56,14 +60,12 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         address _operator,
         address _commonWithdrawAddress,
         address _vaultAddress,
-        address _tokenAddress,
-        address _disputeManagerAddress
+        address _tokenAddress
     ) public {
         operator = _operator;
         commonWithdrawAddress = _commonWithdrawAddress;
         vaultAddress = _vaultAddress;
         vault = VaultInterface(vaultAddress);
-        disputeManagerAddress = _disputeManagerAddress;
         disputeManager = DisputeManagerInterface(disputeManagerAddress);
         tokenAddress = _tokenAddress;
     }
@@ -103,8 +105,7 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
     }
 
     function _processDeposit(uint256 _amount, address _to) internal;
-    function _safeErc20TransferFrom(address _from, address _to, uint256 _amount) internal;
-
+    
     function withdrawERC20Batch(
         bytes32[] calldata _commitments,
         uint256[] calldata _amounts,
@@ -123,14 +124,16 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         bytes32 _hashkey = getHashkey(_commitment);
         require(vault.getAmount(_hashkey) > 0, 'The commitment of this recipient is not exist or used out');
         require(disputeManager.getStatus(_hashkey) != 1, 'This deposit was locked');
-        uint256 refundAmount = _amount < vault.getAmount(_hashkey) ? _amount : vault.getAmount(_hashkey); //Take all if _refund == 0
+        require(_amount == vault.getAmount(_hashkey), "amount must be exactly as balance");
+        uint256 refundAmount = _amount;
         require(refundAmount > 0, "Refund amount can not be zero");
         require(block.timestamp >= vault.getEffectiveTime(_hashkey), "The deposit is locked until the effectiveTime");
         require(refundAmount >= _fee, "Refund amount should be more than fee");
 
         address relayer = relayerWithdrawAddress[_relayer] == address(0x0) ? commonWithdrawAddress : relayerWithdrawAddress[_relayer];
         uint256 decimals = ERC20Interface(tokenAddress).decimals();
-        uint256 _fee1 = tokenManager.getFee(refundAmount.div(10 ** (decimals.sub(6)))).mul(10 ** (decimals.sub(6)));
+        uint256 _usdFee = tokenManager.getFee(refundAmount.mul(exchangeRate).div(1e8).div(10**(decimals.sub(6))));
+        uint256 _fee1 = _usdFee.mul(10**(decimals.add(2))).div(exchangeRate);
         require(_fee1 <= refundAmount, "The fee can not be more than refund amount");
         uint256 _fee2 = relayerWithdrawAddress[_relayer] == address(0x0) ? _fee1 : _fee; // If not through relay, use commonFee
         _processWithdraw(msg.sender, relayer, _fee2, refundAmount);
@@ -140,14 +143,13 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
         vault.subTotalBalance(refundAmount);
 
         uint256 _hours = (block.timestamp.sub(vault.getTimestamp(_hashkey))).div(3600);
-        tokenManager.sendBonus(refundAmount, decimals, _hours, vault.getSender(_hashkey), msg.sender);
+        tokenManager.sendBonus(refundAmount.mul(exchangeRate).div(1e8), decimals, _hours, vault.getSender(_hashkey), msg.sender);
         
         vault.sendWithdrawEvent(_commitment, _fee, refundAmount, block.timestamp);
     }
 
     function _processWithdraw(address payable _recipient, address _relayer, uint256 _fee, uint256 _refund) internal;
-    function _safeErc20Transfer(address _to, uint256 _amount) internal;
-    
+
     function getHashkey(string memory _commitment) internal view returns(bytes32) {
         string memory commitAndTo = concat(_commitment, addressToString(msg.sender));
         return keccak256(abi.encodePacked(commitAndTo));
@@ -270,5 +272,8 @@ contract ShakerV2 is ReentrancyGuard, StringUtils {
     function updateDisputeManager(address _disputeManagerAddress) external nonReentrant onlyOperator {
         disputeManagerAddress = _disputeManagerAddress;
         disputeManager = DisputeManagerInterface(disputeManagerAddress);
+    }
+    function updateExchangeRate(uint256 _rate) external nonReentrant onlyOperator {
+        exchangeRate = _rate;
     }
 }

@@ -172,7 +172,7 @@ contract Vault {
 
     function updateDisputeManager(address _disputeManagerAddress, uint256 _allowance) external onlyOperator returns(bool) {
         disputeManagerAddress = _disputeManagerAddress;
-        // Approve shaker contract
+        // Approve shaker contract  
         safeApprove(erc20Address, _disputeManagerAddress, _allowance);
         return true;
     }

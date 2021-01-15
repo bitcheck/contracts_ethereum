@@ -33,6 +33,7 @@ contract RedPacket is ReentrancyGuard {
     uint256 public feeRate = 50;        // 50 means 0.5%
     address public commonWithdrawAddress; 
     uint256 public maxAmount = 50;      // max amount of each redpacket
+    uint256 public exchangeRate = 1e8;
 
     constructor (
         address _redpacketVaultAddress,
@@ -121,8 +122,7 @@ contract RedPacket is ReentrancyGuard {
     
     function sendBonus(uint256 _refundAmount, uint256 _hours, address _sender) internal {
         uint256 decimals = ERC20Interface(tokenAddress).decimals();
-        ShakerTokenManagerInterface(tokenManager).sendRedpacketBonus(_refundAmount, decimals, _hours, _sender);
-        
+        ShakerTokenManagerInterface(tokenManager).sendRedpacketBonus(_refundAmount.mul(exchangeRate).div(1e8), decimals, _hours, _sender);
     }
 
     function revoke (bytes32 _hashkey, uint256 _version) external nonReentrant {
@@ -191,4 +191,8 @@ contract RedPacket is ReentrancyGuard {
     function updateMaxAmount(uint256 _amount) external nonReentrant onlyOperator {
         maxAmount = _amount;
     }
+    function updateExchangeRate(uint256 _rate) external nonReentrant onlyOperator {
+        exchangeRate = _rate;
+    }
+
 }

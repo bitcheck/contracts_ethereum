@@ -1,4 +1,10 @@
-/* global artifacts */
+/* 该脚本用于部署新的Token */
+/* 使用该脚本前提是：
+   1- BTCH合约已经部署
+   2- BCT合约已经部署
+   3- TokenLocker已经部署
+   4- ShakerTokenManage已经部署
+*/
 require('dotenv').config({ path: '../.env' })
 const Token = artifacts.require('./Mocks/Token.sol')
 const ERC20ShakerV2 = artifacts.require('./ERC20ShakerV2')
@@ -6,153 +12,89 @@ const BTCHToken = artifacts.require('./Mocks/BTCHToken.sol')
 const ShakerTokenManager = artifacts.require('./ShakerTokenManager.sol')
 const DividendPool = artifacts.require('./DividendPool.sol');
 const Vault = artifacts.require('./Vault.sol');
+const Dispute = artifacts.require('./Dispute');
+const DisputeManager = artifacts.require('./DisputeManager.sol');
 const BCTToken = artifacts.require('./Mocks/BCTToken.sol');
 const TokenLocker = artifacts.require('./Mocks/TokenLocker.sol');
+const RedPacket = artifacts.require('./RedPacket.sol');
+const RedpacketVault = artifacts.require('./RedpacketVault.sol');
+const RedpacketVaultV2 = artifacts.require('./RedpacketVaultV2.sol');
 
 module.exports = function(deployer, network, accounts) {
   return deployer.then(async () => {
-    const { ERC20_TOKEN, SHAKER_ADDRESS, FEE_ADDRESS, BTCH_TOKEN, BTCH_TOKEN_MANAGER, DIVIDEND_POOL, TAX_BEREAU, VAULT_ADDRESS, BCT_TOKEN, TOKEN_LOCKER } = process.env
+    const { ERC20_TOKEN, FEE_ADDRESS, BTCH_TOKEN, TOKEN_MANAGER, TAX_BEREAU, BCT_TOKEN, TOKEN_LOCKER, DISPUTE_MANAGER_ALLOWANCE, SHAKER_ALLOWANCE } = process.env
 
-    // Step 1: Deploy Test USDT, if on mainnet, set the real USDT address in .env
-    let token = ERC20_TOKEN
-    if(token === '') token = (await deployer.deploy(Token)).address
-    console.log('Test USDT Token\'s address\n===> ', token);
-
-    let bct = BCT_TOKEN;
-    // if(bct === '') bct = (await deployer.deploy(BCTToken)).address;
-    // else bct = await BCTToken.deployed();
-    // console.log('BCT Token\'s address\n===> ', bct);
-
-    var vault = VAULT_ADDRESS
-    if(vault === '') {
-      vault = await deployer.deploy(
-        Vault,
-        ERC20_TOKEN
-      )
-    } else {
-      vault = await Vault.deployed();
-    }
+    const vault = await deployer.deploy(
+      Vault,
+      ERC20_TOKEN
+    )
     console.log('Vault\'s address \n===> ', vault.address);
 
-    // Step 2: Deploy main shaker contract
-    var shaker = SHAKER_ADDRESS
-    if(shaker === '') {
-      shaker = await deployer.deploy(
+    const dispute = await deployer.deploy(Dispute);
+    console.log('Dispute\'s address \n===> ', dispute.address);
+
+    const dividendPool = await deployer.deploy(
+      DividendPool, 
+      BTCH_TOKEN,
+      ERC20_TOKEN,
+      FEE_ADDRESS
+    );
+    console.log('DividendPool\`s address \n===> ', dividendPool.address);
+    console.log('请别忘了在BTCH中授权该账户');
+
+    const shaker = await deployer.deploy(
       ERC20ShakerV2,
-      accounts[0],  // Operator
       FEE_ADDRESS,  // commonWithdrawAddress
-      token,        // USDT Token address
+      ERC20_TOKEN,
       vault.address
-    )} else {
-      shaker = await ERC20ShakerV2.deployed();
-    }
-    await shaker.updateVault(vault.address);
+    )
     console.log('ShakerV2\'s address \n===> ', shaker.address)
-    vault = await Vault.deployed();
-    // await vault.updateShakerAddress(shaker.address, 10000000 * 10e6); // Approve shaker contract to use vault
 
-    // Step 3: Deploy BTCHToken Manager
-    let btchTokenManager = BTCH_TOKEN_MANAGER
-    if(btchTokenManager === '') {
-      btchTokenManager = await deployer.deploy(
-      ShakerTokenManager, 
+    const disputeManager = await deployer.deploy(
+      DisputeManager,
       shaker.address,
-      TAX_BEREAU
-    )} else {
-      btchTokenManager = await ShakerTokenManager.deployed();
-    }
-    console.log('BitCheck Token(BTCH) Manager\'s address \n===> ', btchTokenManager.address)
-    console.log('BTCH Manager has bound ERC20 Shaker\'s address\n===> ', shaker.address)
+      ERC20_TOKEN,
+      vault.address,
+      dispute.address
+    )
+    console.log('DisputeManager\'s address \n===> ', disputeManager.address);
 
-    // Step 4: Deploy BTCHToken
-    let btchToken = BTCH_TOKEN
-    if(btchToken === '') {
-      btchToken = await deployer.deploy(
-      BTCHToken, 
-      btchTokenManager.address
-    )}else {
-      btchToken = await BTCHToken.deployed();
-    }
-    console.log('BTCH Token\'s address\n===> ', btchToken.address);
-    console.log('BTCH Token has bound Token Manager\'s address \n===> ', btchTokenManager.address);
+    await shaker.updateDisputeManager(disputeManager.address);
+    await dispute.updateDisputeManager(disputeManager.address);
+    await vault.updateDisputeManager(disputeManager.address,DISPUTE_MANAGER_ALLOWANCE * 10**DECIMALS )
+    await vault.updateShakerAddress(shaker.address, SHAKER_ALLOWANCE * 10**DECIMALS)
 
-    let tokenLocker = TOKEN_LOCKER
-    if(tokenLocker === '') {
-      tokenLocker = await deployer.deploy(
-        TokenLocker,
-        btchTokenManager.address,
-        btchToken.address,
-        60,             //cliff is 1 minute
-        86400             // duration is 1 day
-      )
-    } else {
-      tokenLocker = await TokenLocker.deployed();
-    }
-    console.log('TokenLock\'s address \n===> ', tokenLocker.address);
+    const redpacketVault = await deployer.deploy(
+      RedpacketVault,
+      ERC20_TOKEN
+    )
+    console.log('RedpacketVault\'s address \n===> ', redpacketVault.address);
 
-    // Step 5: 
-    btchTokenManager = await ShakerTokenManager.deployed();
-    await btchTokenManager.setTokenLockerAddress(tokenLocker.address);
-    console.log('Token Manager has bound TokenLocker\'s address\n===> ', tokenLocker.address);
+    const redpacketVaultV2 = await deployer.deploy(
+      RedpacketVaultV2,
+      ERC20_TOKEN
+    )
+    console.log('RedpacketVaultV2\'s address \n===> ', redpacketVaultV2.address);
 
-    await btchTokenManager.setTokenAddress(btchToken.address);
-    console.log('Token Manager has bound BTCH Token\'s address\n===> ', btchToken.address);
+    const redpacket = await deployer.deploy(
+      RedPacket,
+      redpacketVault.address,
+      redpacketVaultV2.address,
+      ERC20_TOKEN,
+      FEE_ADDRESS
+    );
+    console.log('Redpacket\'s address \n===> ', redpacket.address);
+    redpacket.updateTokenManager(TOKEN_MANAGER);
+    redpacketVault.updateRedpacketManagerAddress(redpacketManager.address, REDPACKET_ALLOWANCE * 10**DECIMALS);
+    redpacketVaultV2.updateRedpacketManagerAddress(redpacketManager.address, REDPACKET_ALLOWANCE * 10**DECIMALS);
 
-    await btchTokenManager.setBCTAddress(bct);
-    console.log('Token Manager has bound BCT Token\'s address\n===> ', bct);
+    const tokenManager = await ShakerTokenManager.deployed();
+    await tokenManager.setShakerContractAddress(shaker.address);
+    await tokenManager.setRedpacketAddress(redpacket.address);
 
-    // Step 6:
-    await btchToken.updateAuthorizedContract(btchTokenManager.address);
-    console.log('BTCH Token has updated authorized manager contract \n===> ', btchTokenManager.address);
-    
-    // Step 7: 
-    shaker = await ERC20ShakerV2.deployed();
-    await shaker.updateBonusTokenManager(btchTokenManager.address);
-    console.log('Shaker has bound Token Manager\'s address\n===> ', btchTokenManager.address);
-    await btchTokenManager.setShakerContractAddress(shaker.address);
-    console.log('Token Manager has bound Shaker \'s address\n===> ', shaker.address);
+    await shaker.updateBonusTokenManager(tokenManager.address);
+    await shaker.updateExchangeRate(EXCHANGE_RATE * 10**DECIMALS);
+    await redpacket.updateExchangeRate(EXCHANGE_RATE * 10**DECIMALS);
 
-    // Step 8:
-    let dividendPool = DIVIDEND_POOL;
-    if(dividendPool === '') {
-      dividendPool = await deployer.deploy(
-        DividendPool,
-        btchToken.address,
-        ERC20_TOKEN,
-        FEE_ADDRESS     // Send dividend from this address
-      )
-    } else {
-      dividendPool = await DividendPool.deployed();
-      await dividendPool.updateTokenAddress(btchToken.address);
-      await dividendPool.setDividentAddress(ERC20_TOKEN);
-      await dividendPool.setFeeAddress(FEE_ADDRESS);
-    }
-    console.log('Dividend Pool\'s address\n===> ', dividendPool.address);
-    console.log(`*** Please approve dividend pool contract ${dividendPool.address} to use 100000 USDT from fee account ${FEE_ADDRESS} MANULLY`);
-    console.log(`approve(${dividendPool.address}, 100000000000)`);
-
-    // Testing
-    console.log('\n====== TEST ======\n')
-    shaker = await ERC20ShakerV2.deployed();
-    const _feeAddress = await shaker.commonWithdrawAddress();
-    const _managerAddress2 = await shaker.tokenManager();
-    btchTokenManager = await ShakerTokenManager.deployed()
-    const _shakerAddress = await btchTokenManager.shakerContractAddress();
-    const _tokenAddress = await btchTokenManager.tokenAddress();
-    btchToken = await BTCHToken.deployed();
-    const _managerAddress = await btchToken.authorizedContract();
-    dividendPool = await DividendPool.deployed();
-    const _tokenAddress2 = await dividendPool.tokenAddress();
-    const _dividentAddress = await dividendPool.dividentAddress();
-    const _feeAddress2 = await dividendPool.feeAddress();
-
-    console.log("Fee address in shaker: " + _feeAddress);
-    console.log("Fee address in dividendPool: " + _feeAddress2);
-    console.log("Token manager address in shaker: " + _managerAddress2);
-    console.log("Token manager address in btchToken: " + _managerAddress);
-    console.log("Shaker address in BTCH Token manager: " + _shakerAddress);
-    console.log("Token address in BTCH Token manager: " + _tokenAddress);
-    console.log("TokenAddress in dividendPool: " + _tokenAddress2);
-    console.log("Dividend Token address in dividendPool: " + _dividentAddress);
   })
 }

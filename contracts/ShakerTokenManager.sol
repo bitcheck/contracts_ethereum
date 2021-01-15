@@ -75,10 +75,9 @@ contract ShakerTokenManager is ReentrancyGuard {
     BTCHTokenInterface public token;
     address public bctAddress;                    // BCT (Bitcheck commitee token) address
 
-    address public shakerContractAddress;         // Shaker contract address
     address public tokenLockerAddress;            // TokenLocker contract address
-    address public redpacketAddress;
-
+    address[] public shakerContractAddresses;         // Shaker contract address
+    address[] public redpacketAddresses;
 
     modifier onlyOperator {
         require(msg.sender == operator, "Only operator can call this function.");
@@ -86,36 +85,32 @@ contract ShakerTokenManager is ReentrancyGuard {
     }
 
     modifier onlyShaker {
-        require(msg.sender == shakerContractAddress, "Only bitcheck contract can call this function.");
+        require(hasShakerContractAddress(msg.sender), "Only bitcheck contract can call this function.");
         _;
     }
     
     modifier onlyRedpacket {
-        require(msg.sender == redpacketAddress, "Only redpacket contract can call this function.");
+        require(hasRedpacketContractAddress(msg.sender), "Only redpacket contract can call this function.");
         _;
     }
     
     constructor(
-      address _shakerContractAddress, 
       address _taxBereauAddress, 
-      address _tokenAddress, 
+      address _bonusTokenAddress, 
       address _bctAddress,
-      address _tokenLockerAddress,
-      address _redpacketAddress
+      address _tokenLockerAddress
     ) public {
         operator = msg.sender;
-        shakerContractAddress = _shakerContractAddress;
         taxBereauAddress = _taxBereauAddress;
-        tokenAddress = _tokenAddress;
+        tokenAddress = _bonusTokenAddress;
         token = BTCHTokenInterface(tokenAddress);
         bctAddress = _bctAddress;
         tokenLockerAddress = _tokenLockerAddress;
-        redpacketAddress = _redpacketAddress;
     }
     
     function sendBonus(uint256 _amount, uint256 _decimals, uint256 _hours, address _depositer, address _withdrawer) external nonReentrant onlyShaker returns(bool) {
-        require(_amount < 1e18);
-        if(_amount <= minMintAmount) return true;
+        require(_amount < 1e28, "max is 1e28");
+        if(_amount.div(10**(_decimals.sub(6))) <= minMintAmount) return true;
         (uint256 mintAmount, bool isBCTHolder) = this.getMintAmount(_amount.div(10 ** (_decimals.sub(6))), _hours, _depositer);
         if(mintAmount == 0) return true;
         uint256 tax = mintAmount.mul(taxRate).div(10000);
@@ -144,8 +139,8 @@ contract ShakerTokenManager is ReentrancyGuard {
     }
 
     function sendRedpacketBonus(uint256 _amount, uint256 _decimals, uint256 _hours, address _depositer) external nonReentrant onlyRedpacket returns(bool) {
-        require(_amount < 1e18);
-        if(_amount <= minRedpacketMintAmount) return true;
+        require(_amount < 1e28, "max is 1e28");
+        if(_amount.div(10**(_decimals.sub(6))) <= minRedpacketMintAmount) return true;
         (uint256 mintAmount, bool isBCTHolder) = this.getMintAmount(_amount.div(10 ** (_decimals.sub(6))), _hours, _depositer);
         if(mintAmount == 0) return true;
         uint256 tax = mintAmount.mul(taxRate).div(10000);
@@ -190,7 +185,7 @@ contract ShakerTokenManager is ReentrancyGuard {
     function getFee(uint256 _amount) external view returns(uint256) {
         // return fee amount, including decimals
         // calculates base on decimals = 6, to avoid the memory leakage while calling getExponent()
-        require(_amount < 1e18);
+        require(_amount < 1e28, "max is 1e28");
         if(_amount <= minChargeFeeAmount) return getSpecialFee(_amount);
         uint256 amountExponented = getExponent(_amount);
         return amountExponented.mul(feeRate).div(1e5);
@@ -198,7 +193,7 @@ contract ShakerTokenManager is ReentrancyGuard {
     
     function getExponent(uint256 _amount) internal view returns(uint256) {
         // if 2000, the _amount should be 2000 * 10**decimals, return back 2000**(2/3) * 10**decimals
-        if(_amount > 1e18) return 0;
+        if(_amount > 1e28) return 0;
         uint256 e = nthRoot(_amount, exponent[1], bonusTokenDecimals, 1e18);
         return e.mul(e).div(10 ** (bonusTokenDecimals + depositTokenDecimals * exponent[0] / exponent[1]));
     }
@@ -291,9 +286,30 @@ contract ShakerTokenManager is ReentrancyGuard {
     }
     
     function setShakerContractAddress(address _shakerContractAddress) external onlyOperator {
-        shakerContractAddress = _shakerContractAddress;
+        if(!hasShakerContractAddress(_shakerContractAddress)) shakerContractAddresses.push(_shakerContractAddress);
     }
     
+    function hasShakerContractAddress(address _address) internal view returns(bool) {
+        bool ok = false;
+        for(uint256 i = 0; i < shakerContractAddresses.length; i++) {
+            if(_address == shakerContractAddresses[i]) {
+                ok = true;
+                break;
+            }
+        }
+        return ok;
+    }
+    
+    function hasRedpacketContractAddress(address _address) internal view returns(bool) {
+        bool ok = false;
+        for(uint256 i = 0; i < redpacketAddresses.length; i++) {
+            if(_address == redpacketAddresses[i]) {
+                ok = true;
+                break;
+            }
+        }
+        return ok;
+    }
     function setExponent(uint256[] calldata _exp) external onlyOperator {
         require(_exp.length == 2 && _exp[1] >= 0);
         exponent = _exp;
@@ -364,7 +380,7 @@ contract ShakerTokenManager is ReentrancyGuard {
       bctHolderSpecialTotalSupply = _specialTotalSupply;
     }
     function setRedpacketAddress(address _address) external onlyOperator {
-        redpacketAddress = _address;
+        if(!hasRedpacketContractAddress(_address)) redpacketAddresses.push(_address);
     }
     
     function setMinRedpacketMintAmount(uint256 _minRedpacketMintAmount) external onlyOperator {
