@@ -7,22 +7,22 @@
 */
 require('dotenv').config({ path: '../.env' })
 const Token = artifacts.require('./Mocks/Token.sol')
-const ERC20ShakerV2 = artifacts.require('./ERC20ShakerV2')
 const BTCHToken = artifacts.require('./Mocks/BTCHToken.sol')
+const BCTToken = artifacts.require('./Mocks/BCTToken.sol');
+const TokenLocker = artifacts.require('./Mocks/TokenLocker.sol');
+const ERC20ShakerV2 = artifacts.require('./ERC20ShakerV2')
 const ShakerTokenManager = artifacts.require('./ShakerTokenManager.sol')
 const DividendPool = artifacts.require('./DividendPool.sol');
 const Vault = artifacts.require('./Vault.sol');
 const Dispute = artifacts.require('./Dispute');
 const DisputeManager = artifacts.require('./DisputeManager.sol');
-const BCTToken = artifacts.require('./Mocks/BCTToken.sol');
-const TokenLocker = artifacts.require('./Mocks/TokenLocker.sol');
 const RedPacket = artifacts.require('./RedPacket.sol');
 const RedpacketVault = artifacts.require('./RedpacketVault.sol');
 const RedpacketVaultV2 = artifacts.require('./RedpacketVaultV2.sol');
 
 module.exports = function(deployer, network, accounts) {
   return deployer.then(async () => {
-    const { ERC20_TOKEN, FEE_ADDRESS, BTCH_TOKEN, TOKEN_MANAGER, TAX_BEREAU, BCT_TOKEN, TOKEN_LOCKER, DISPUTE_MANAGER_ALLOWANCE, SHAKER_ALLOWANCE } = process.env
+    const { ERC20_TOKEN, FEE_ADDRESS, BTCH_TOKEN, TOKEN_MANAGER, DECIMALS, TAX_BEREAU, BCT_TOKEN, TOKEN_LOCKER, DISPUTE_MANAGER_ALLOWANCE, SHAKER_ALLOWANCE } = process.env
 
     const vault = await deployer.deploy(
       Vault,
@@ -44,7 +44,7 @@ module.exports = function(deployer, network, accounts) {
 
     const shaker = await deployer.deploy(
       ERC20ShakerV2,
-      FEE_ADDRESS,  // commonWithdrawAddress
+      FEE_ADDRESS,
       ERC20_TOKEN,
       vault.address
     )
@@ -61,8 +61,8 @@ module.exports = function(deployer, network, accounts) {
 
     await shaker.updateDisputeManager(disputeManager.address);
     await dispute.updateDisputeManager(disputeManager.address);
-    await vault.updateDisputeManager(disputeManager.address,DISPUTE_MANAGER_ALLOWANCE * 10**DECIMALS )
-    await vault.updateShakerAddress(shaker.address, SHAKER_ALLOWANCE * 10**DECIMALS)
+    await vault.updateDisputeManager(disputeManager.address,DISPUTE_MANAGER_ALLOWANCE + "0".repeat(DECIMALS));
+    await vault.updateShakerAddress(shaker.address, SHAKER_ALLOWANCE + "0".repeat(DECIMALS));
 
     const redpacketVault = await deployer.deploy(
       RedpacketVault,
@@ -85,16 +85,16 @@ module.exports = function(deployer, network, accounts) {
     );
     console.log('Redpacket\'s address \n===> ', redpacket.address);
     redpacket.updateTokenManager(TOKEN_MANAGER);
-    redpacketVault.updateRedpacketManagerAddress(redpacketManager.address, REDPACKET_ALLOWANCE * 10**DECIMALS);
-    redpacketVaultV2.updateRedpacketManagerAddress(redpacketManager.address, REDPACKET_ALLOWANCE * 10**DECIMALS);
+    redpacketVault.updateRedpacketManagerAddress(redpacket.address, REDPACKET_ALLOWANCE + "0".repeat(DECIMALS));
+    redpacketVaultV2.updateRedpacketManagerAddress(redpacket.address, REDPACKET_ALLOWANCE + "0".repeat(DECIMALS));
 
     const tokenManager = await ShakerTokenManager.deployed();
     await tokenManager.setShakerContractAddress(shaker.address);
     await tokenManager.setRedpacketAddress(redpacket.address);
 
     await shaker.updateBonusTokenManager(tokenManager.address);
-    await shaker.updateExchangeRate(EXCHANGE_RATE * 10**DECIMALS);
-    await redpacket.updateExchangeRate(EXCHANGE_RATE * 10**DECIMALS);
+    await shaker.updateExchangeRate(EXCHANGE_RATE + "0".repeat(DECIMALS));
+    await redpacket.updateExchangeRate(EXCHANGE_RATE + "0".repeat(DECIMALS));
 
   })
 }
