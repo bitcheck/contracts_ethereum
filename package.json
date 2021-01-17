@@ -11,6 +11,7 @@
     "migrate:kovan": "npx truffle migrate --network kovan",
     "migrate:rinkeby": "npx truffle migrate --network rinkeby",
     "migrate:mainnet": "npx truffle migrate --network mainnet",
+    "migrate:heco": "npx truffle migrate --network heco",
     "eslint": "npx eslint --ignore-path .gitignore .",
     "flat": "npx truffle-flattener contracts/ETHTornado.sol > ETHTornado_flat.sol && npx truffle-flattener contracts/ERC20Tornado.sol > ERC20Tornado_flat.sol",
     "download": "node downloadKeys.js"

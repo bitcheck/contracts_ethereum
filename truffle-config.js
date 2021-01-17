@@ -69,6 +69,15 @@ module.exports = {
       // timeoutBlocks: 200,
       skipDryRun: true
     },
+    heco: {
+      provider: () => new HDWalletProvider(process.env.PRIVATE_KEY_HECO_MAIN, 'https://http-mainnet.hecochain.com'),
+      network_id: 128,
+      gas: 8000000,
+      gasPrice: utils.toWei('2', 'gwei'),
+      // confirmations: 0,
+      // timeoutBlocks: 200,
+      skipDryRun: true
+    },
 
     // Useful for private networks
     // private: {

@@ -63,8 +63,7 @@ contract RedPacket is ReentrancyGuard {
         uint256 _version
     ) external nonReentrant {
         RedpacketVaultInterface vault = _version == 1 ? RedpacketVaultInterface(redpacketVaultAddress) : RedpacketVaultInterface(redpacketVaultV2Address);
-        uint256 decimals = ERC20Interface(tokenAddress).decimals();
-        require(_amount <= maxAmount * 10**decimals, 'exceed max amount of each redpacket');
+        require(_amount <= maxAmount, 'exceed max amount of each redpacket');
         require(vault.getStatus(_hashKey) == 0, "The commitment has been submitted or used out.");
         require(_amount > 0);
         

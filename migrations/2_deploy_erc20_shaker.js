@@ -10,8 +10,8 @@ const Token = artifacts.require('./Mocks/Token.sol')
 const BTCHToken = artifacts.require('./Mocks/BTCHToken.sol')
 const BCTToken = artifacts.require('./Mocks/BCTToken.sol');
 const TokenLocker = artifacts.require('./Mocks/TokenLocker.sol');
-const ERC20ShakerV2 = artifacts.require('./ERC20ShakerV2')
-const ShakerTokenManager = artifacts.require('./ShakerTokenManager.sol')
+const ERC20ShakerV2 = artifacts.require('./ERC20ShakerV2');
+const ShakerTokenManager = artifacts.require('./ShakerTokenManager.sol');
 const DividendPool = artifacts.require('./DividendPool.sol');
 const Vault = artifacts.require('./Vault.sol');
 const Dispute = artifacts.require('./Dispute');
@@ -20,9 +20,38 @@ const RedPacket = artifacts.require('./RedPacket.sol');
 const RedpacketVault = artifacts.require('./RedpacketVault.sol');
 const RedpacketVaultV2 = artifacts.require('./RedpacketVaultV2.sol');
 
+function toWeiString(numStr, decimal) {
+	numStr = numStr.toString();
+	let zheng = numStr.substring(0, numStr.indexOf('.'));
+	if(numStr.indexOf('.') > 0) zheng = parseInt(zheng) === 0 ? "" : zheng;
+	else zheng = numStr;
+	let xiao, xiaoLength;
+	if(numStr.indexOf('.') > 0) {
+		xiao = numStr.substr(numStr.indexOf('.') + 1, numStr.length - zheng.length - 1)
+	} else {
+		xiao = "";
+	}
+	
+	if(xiao.length > decimal) {
+		xiaoLength = decimal;
+		xiao = xiao.substring(0, decimal);
+	} else {
+		xiaoLength = xiao.length;
+	}
+	const xiaoNew = xiao + ("0").repeat(decimal - xiaoLength)
+	const result = zheng + xiaoNew;
+	let i;
+	for(i = 1; i < decimal; i++) {
+		if(result.substring(0, i) !== ("0").repeat(i)) {
+			break;
+		}
+	}
+	return(result.substring(i - 1));
+}
+
 module.exports = function(deployer, network, accounts) {
   return deployer.then(async () => {
-    const { ERC20_TOKEN, FEE_ADDRESS, BTCH_TOKEN, TOKEN_MANAGER, DECIMALS, TAX_BEREAU, BCT_TOKEN, TOKEN_LOCKER, DISPUTE_MANAGER_ALLOWANCE, SHAKER_ALLOWANCE } = process.env
+    const { ERC20_TOKEN, FEE_ADDRESS, BTCH_TOKEN, TOKEN_MANAGER, DECIMALS, TAX_BEREAU, BCT_TOKEN, TOKEN_LOCKER, DISPUTE_MANAGER_ALLOWANCE, SHAKER_ALLOWANCE, REDPACKET_ALLOWANCE, EXCHANGE_RATE, MAX_REDPACKET_AMOUNT } = process.env
 
     const vault = await deployer.deploy(
       Vault,
@@ -40,7 +69,6 @@ module.exports = function(deployer, network, accounts) {
       FEE_ADDRESS
     );
     console.log('DividendPool\`s address \n===> ', dividendPool.address);
-    console.log('请别忘了在BTCH中授权该账户');
 
     const shaker = await deployer.deploy(
       ERC20ShakerV2,
@@ -48,6 +76,8 @@ module.exports = function(deployer, network, accounts) {
       ERC20_TOKEN,
       vault.address
     )
+    await shaker.updateBonusTokenManager(TOKEN_MANAGER);
+    await shaker.updateExchangeRate(EXCHANGE_RATE);
     console.log('ShakerV2\'s address \n===> ', shaker.address)
 
     const disputeManager = await deployer.deploy(
@@ -61,8 +91,8 @@ module.exports = function(deployer, network, accounts) {
 
     await shaker.updateDisputeManager(disputeManager.address);
     await dispute.updateDisputeManager(disputeManager.address);
-    await vault.updateDisputeManager(disputeManager.address,DISPUTE_MANAGER_ALLOWANCE + "0".repeat(DECIMALS));
-    await vault.updateShakerAddress(shaker.address, SHAKER_ALLOWANCE + "0".repeat(DECIMALS));
+    await vault.updateDisputeManager(disputeManager.address, toWeiString(DISPUTE_MANAGER_ALLOWANCE, DECIMALS));
+    await vault.updateShakerAddress(shaker.address, toWeiString(SHAKER_ALLOWANCE, DECIMALS));
 
     const redpacketVault = await deployer.deploy(
       RedpacketVault,
@@ -84,17 +114,21 @@ module.exports = function(deployer, network, accounts) {
       FEE_ADDRESS
     );
     console.log('Redpacket\'s address \n===> ', redpacket.address);
-    redpacket.updateTokenManager(TOKEN_MANAGER);
-    redpacketVault.updateRedpacketManagerAddress(redpacket.address, REDPACKET_ALLOWANCE + "0".repeat(DECIMALS));
-    redpacketVaultV2.updateRedpacketManagerAddress(redpacket.address, REDPACKET_ALLOWANCE + "0".repeat(DECIMALS));
+    await redpacket.updateTokenManager(TOKEN_MANAGER);
+    await redpacket.updateExchangeRate(EXCHANGE_RATE);
+    await redpacket.updateMaxAmount(MAX_REDPACKET_AMOUNT);
 
-    const tokenManager = await ShakerTokenManager.deployed();
-    await tokenManager.setShakerContractAddress(shaker.address);
-    await tokenManager.setRedpacketAddress(redpacket.address);
+    await redpacketVault.updateRedpacketManagerAddress(redpacket.address, toWeiString(REDPACKET_ALLOWANCE, DECIMALS));
+    await redpacketVaultV2.updateRedpacketManagerAddress(redpacket.address, toWeiString(REDPACKET_ALLOWANCE, DECIMALS));
 
-    await shaker.updateBonusTokenManager(tokenManager.address);
-    await shaker.updateExchangeRate(EXCHANGE_RATE + "0".repeat(DECIMALS));
-    await redpacket.updateExchangeRate(EXCHANGE_RATE + "0".repeat(DECIMALS));
-
+    console.log('==========================================');
+    console.log('以下手动操作:');
+    console.log('请登陆手续费账户，在BTCH中授权' + dividendPool.address + '合约');
+    console.log('请将shaker合约地址: ' + shaker.address + ' 加入到TokenManager合约' + TOKEN_MANAGER + '中');
+    console.log('请将redpacket合约地址: ' + redpacket.address + ' 加入到TokenManager合约' + TOKEN_MANAGER + '中');
+    console.log('==========================================');
+    // const tokenManager = await ShakerTokenManager.deployed();
+    // await tokenManager.setShakerContractAddress(shaker.address);
+    // await tokenManager.setRedpacketAddress(redpacket.address);
   })
 }
