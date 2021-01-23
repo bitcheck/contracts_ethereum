@@ -43,8 +43,8 @@ contract Vault {
     address public shakerContractAddress;
     address public disputeManagerAddress;
 
-    event Deposit(address sender, bytes32 hashkey, uint256 amount, uint256 timestamp);
-    event Withdrawal(string commitment, uint256 fee, uint256 amount, uint256 timestamp);
+    event Deposit(address indexed sender, bytes32 indexed hashkey, uint256 amount, uint256 timestamp);
+    event Withdrawal(string indexed commitment, uint256 fee, uint256 amount, uint256 timestamp);
 
     function sendDepositEvent(address _sender, bytes32 _hashkey, uint256 _amount, uint256 _timestamp) external onlyShakerAndDisputManager {
       emit Deposit(_sender, _hashkey, _amount, _timestamp);
@@ -172,13 +172,17 @@ contract Vault {
 
     function updateDisputeManager(address _disputeManagerAddress, uint256 _allowance) external onlyOperator returns(bool) {
         disputeManagerAddress = _disputeManagerAddress;
-        // Approve shaker contract  
+        // Approve shaker contract
         safeApprove(erc20Address, _disputeManagerAddress, _allowance);
         return true;
     }
 
     function getShakerAllowance() external view returns(uint256) {
       return erc20.allowance(address(this), shakerContractAddress);
+    }
+    
+    function getDisputeManagerAllowance() external view returns(uint256) {
+        return erc20.allowance(address(this), disputeManagerAddress);
     }
 
     function addTotalAmount(uint256 _amount) external onlyShakerAndDisputManager {

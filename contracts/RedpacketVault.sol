@@ -40,8 +40,8 @@ contract RedpacketVault {
     address public operator;
     address public redpacketManagerAddress;
 
-    event RedPacketDeposit(address sender, bytes32 hashKey, uint256 amount, uint256 timestamp);
-    event RedPacketWithdraw(address sender, address recipient, bytes32 hashKey, uint256 amount, uint256 timestamp);
+    event RedPacketDeposit(address indexed sender, bytes32 indexed hashKey, uint256 amount, uint256 timestamp);
+    event RedPacketWithdraw(address indexed sender, address indexed recipient, bytes32 indexed hashKey, uint256 amount, uint256 timestamp);
 
     function sendRedpacketDepositEvent(address _sender, bytes32 _hashkey, uint256 _amount, uint256 _timestamp) external onlyRedpacketManager {
       emit RedPacketDeposit(_sender, _hashkey, _amount, _timestamp);

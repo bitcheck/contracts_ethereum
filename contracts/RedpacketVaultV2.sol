@@ -103,15 +103,20 @@ contract RedpacketVaultV2 {
         commitments[_hashkey].takenAddresses.push(_address);
     }
     
-    function getHashkeysBySender() external view returns(bytes32[] memory hashkeys) {
-        hashkeys = hashKeys[msg.sender];
+    function getHashkeysBySender() external view returns(bytes32[] memory) {
+        bytes32[] memory hashkeys = new bytes32[](hashKeys[msg.sender].length);
+        for(uint256 i = 0; i < hashKeys[msg.sender].length; i++) {
+            if(this.getAmount(hashKeys[msg.sender][i]) == 0) continue;
+            hashkeys[i] = hashKeys[msg.sender][i];
+        }
+        return hashkeys;
     }
     
     function getStatus(bytes32 _hashkey) external view onlyRedpacketManager returns(uint256) {
         return commitments[_hashkey].status;
     }
     
-    function getAmount(bytes32 _hashkey) external view onlyRedpacketManager returns(uint256) {
+    function getAmount(bytes32 _hashkey) external view returns(uint256) {
         return commitments[_hashkey].amount;
     }
     
