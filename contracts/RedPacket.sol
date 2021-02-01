@@ -34,6 +34,7 @@ contract RedPacket is ReentrancyGuard {
     address public commonWithdrawAddress; 
     uint256 public maxAmount = 50;      // max amount of each redpacket
     uint256 public exchangeRate = 1e8;
+    mapping(bytes32 => mapping(address => uint256)) redpacketTaken;
 
     constructor (
         address _redpacketVaultAddress,
@@ -87,6 +88,7 @@ contract RedPacket is ReentrancyGuard {
     }
     
     function withdraw (bytes32 _hashkey, uint256 _version) external nonReentrant {
+        require(redpacketTaken[_hashkey][msg.sender] == 0, "Has taken this redpacket");
         RedpacketVaultInterface vault = _version == 1 ? RedpacketVaultInterface(redpacketVaultAddress) : RedpacketVaultInterface(redpacketVaultV2Address);
         address vaultAddress = _version == 1 ? redpacketVaultAddress : redpacketVaultV2Address;
         
@@ -104,7 +106,7 @@ contract RedPacket is ReentrancyGuard {
         vault.setStatus(_hashkey, vault.getAmount(_hashkey) <= 0 ? 0 : 1);
         vault.setWithdrawTimes(_hashkey, vault.getWithdrawTimes(_hashkey).add(1));
         vault.subTotalBalance(refundAmount);
-        vault.addTakenAddress(_hashkey, msg.sender);
+        redpacketTaken[_hashkey][msg.sender] = 1;
 
         uint256 _fee = refundAmount.mul(feeRate).div(10000);
         require(_fee <= refundAmount, "The fee can not be more than refund amount");
@@ -126,12 +128,11 @@ contract RedPacket is ReentrancyGuard {
 
     function revoke (bytes32 _hashkey, uint256 _version) external nonReentrant {
         RedpacketVaultInterface vault = _version == 1 ? RedpacketVaultInterface(redpacketVaultAddress) : RedpacketVaultInterface(redpacketVaultV2Address);
-        address vaultAddress = _version == 1 ? redpacketVaultAddress : redpacketVaultV2Address;
-
+        require(msg.sender == vault.getSender(_hashkey), 'The revoke must be operated by sender');
         uint256 amount = vault.getAmount(_hashkey);
         require(amount > 0, 'The commitment of this recipient is not exist or used out');
-        require(msg.sender == vault.getSender(_hashkey), 'The revoke must be operated by sender');
 
+        address vaultAddress = _version == 1 ? redpacketVaultAddress : redpacketVaultV2Address;
         uint256 allowance = ERC20Interface(tokenAddress).allowance(vaultAddress, address(this));
         require(allowance >= amount, "allowance of redpacket manager to vault is not enough");
         TransferHelper.safeTransferFrom(tokenAddress, vaultAddress, msg.sender, amount);
@@ -141,8 +142,13 @@ contract RedPacket is ReentrancyGuard {
         vault.subTotalBalance(amount);
     }
     
+    function isTaken(bytes32 _hashkey) external view returns(uint256) {
+        return redpacketTaken[_hashkey][msg.sender];
+    }
+    
     function getAmount(bytes32 _hashkey, uint256 _version) external view returns(uint256, uint256, uint256, uint256, string memory) {
         RedpacketVaultInterface vault = _version == 1 ? RedpacketVaultInterface(redpacketVaultAddress) : RedpacketVaultInterface(redpacketVaultV2Address);
+        // require(msg.sender == vault.getSender(_hashkey), "only sender can call this function");
         uint256 balance = vault.getAmount(_hashkey);
         uint256 times = vault.getWithdrawTimes(_hashkey);
         uint256 cliff = vault.getCliff(_hashkey);
@@ -153,6 +159,7 @@ contract RedPacket is ReentrancyGuard {
 
     function getMoreDetails(bytes32 _hashkey, uint256 _version) external view returns(uint256, uint256, address) {
         RedpacketVaultInterface vault = _version == 1 ? RedpacketVaultInterface(redpacketVaultAddress) : RedpacketVaultInterface(redpacketVaultV2Address);
+        // require(msg.sender == vault.getSender(_hashkey), "only sender can call this function");
         uint256 amount = vault.getAmount(_hashkey);
         uint256 timestamp = vault.getTimestamp(_hashkey);
         address sender = vault.getSender(_hashkey);
